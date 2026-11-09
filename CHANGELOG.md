@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+No changes after v0.1.1 yet.
+
+## 0.1.1 — 2026-11-09
+
+Release readiness: 268-test runtime validation, plus exact publication commit CI,
+clean tag installation and synthetic demonstration recorded in GitHub Release.
+v0.1.0 remains unchanged. Existing human pilot stays pinned to v0.1.0 unless
+its study version is explicitly changed; do not mix participant versions.
+
 - Index readable function/custom tool results and include them in default recall,
   with historical call IDs/source lines and matching excerpts in long results.
   Refresh older cached indexes once without losing annotations. Keep derived

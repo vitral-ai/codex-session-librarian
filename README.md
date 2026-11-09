@@ -9,12 +9,13 @@ the actual JSONL history, not just a summary. See the maintained
 
 ## Install
 
-**Published version: [v0.1.0](https://github.com/vitral-ai/codex-session-librarian/releases/tag/v0.1.0)**,
-commit `edd05bb20eb145dea6178d548f1363b9516102af`, released November 5, 2026.
-Its runtime validation record contains 253 tests. Install this fixed version with:
+**Release v0.1.1:** after confirming the [published tag](https://github.com/vitral-ai/codex-session-librarian/releases/tag/v0.1.1),
+install the fixed version below. It includes historical tool display and readable
+tool-result retrieval; the full runtime validation record contains 268 tests.
+Exact publication SHA, date and checks are recorded in GitHub Releases.
 
 ```bash
-git clone --branch v0.1.0 https://github.com/vitral-ai/codex-session-librarian.git
+git clone --branch v0.1.1 https://github.com/vitral-ai/codex-session-librarian.git
 cd codex-session-librarian
 ./install.sh
 ```
@@ -31,13 +32,16 @@ string alone does not identify a development checkout's commit.
 
 ### Development versus the published release
 
-`main` includes the later issue #7 historical-tool display correction and its
-additional secret-review coverage. These changes are **Unreleased and absent
-from v0.1.0**. The expanded 260-test validation belongs to the later PR #9 head;
-it does not replace the released version's 253-test record. See
-[tool-display validation](docs/TOOL_DISPLAY_VALIDATION.md),
-[CHANGELOG](CHANGELOG.md), and [compatibility evidence](docs/COMPATIBILITY_MAINTENANCE.md).
-Human pilot comparisons use the fixed v0.1.0 tag, not main.
+Version v0.1.1 includes the issue #7 historical-tool display correction, its
+secret-review coverage and readable tool-result indexing/default recall.
+v0.1.0 remains unchanged at `edd05bb20eb145dea6178d548f1363b9516102af`, with its
+253-test record. The historical 260-test run belongs to PR #9's earlier head;
+the combined v0.1.1 runtime has 268 tests. See [CHANGELOG](CHANGELOG.md) and
+[compatibility evidence](docs/COMPATIBILITY_MAINTENANCE.md).
+
+The existing human pilot remains fixed to v0.1.0 and its original data. Do not
+silently switch participants to v0.1.1 or main. Future main changes after a tag
+are development until separately released.
 
 To follow development in a separate checkout:
 
@@ -220,7 +224,7 @@ See [portable transfers](docs/TRANSFERS.md).
 ## Find And Reopen A Conversation
 
 Published v0.1.0 indexes messages and selected commands, files, patches and commit
-evidence. On main (**Unreleased**), readable function/custom tool results are also
+evidence. Starting with **v0.1.1**, readable function/custom tool results are also
 indexed and included by default in `recall`, with source lines and call IDs.
 After updating development code, run `csl index`: unchanged files from older
 indexes are refreshed once, preserving annotations. `--turns-only` keeps a

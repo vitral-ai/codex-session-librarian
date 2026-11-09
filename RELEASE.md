@@ -1,19 +1,23 @@
 # Release operation and published state
 
-## Published v0.1.0
+## Version records
 
-[GitHub Release v0.1.0](https://github.com/vitral-ai/codex-session-librarian/releases/tag/v0.1.0)
-was published November 5, 2026 from exact commit
-`edd05bb20eb145dea6178d548f1363b9516102af`.
-The validation record for its runtime contains 253 tests, isolated installation
-and an offline demo. Repository transfer to Vitral preserved this tag and release.
-Do not move the tag or edit its contents to include later development changes.
+[v0.1.1](https://github.com/vitral-ai/codex-session-librarian/releases/tag/v0.1.1)
+includes the historical-tool display, secret-review and recall corrections from
+main. Exact publication SHA, date and CI are recorded in that GitHub Release.
+The tag is official only once the Release exists; a prepared version string is
+not publication. Runtime validation: 268 tests with native/media/migration opt-ins.
 
-The issue #7 display correction and additional secret-review checks are on main,
-**Unreleased**, not in v0.1.0. The 260-test validation in
-[TOOL_DISPLAY_VALIDATION.md](docs/TOOL_DISPLAY_VALIDATION.md) belongs to that later
-code. Native display, structural fidelity and model continuation are separate
-measurements. No 0.1.1 publication follows automatically from an audit closing.
+[v0.1.0](https://github.com/vitral-ai/codex-session-librarian/releases/tag/v0.1.0)
+was published November 5, 2026 from
+`edd05bb20eb145dea6178d548f1363b9516102af`, with its 253-test runtime record.
+Its tag and notes remain unchanged; it does not include the later display/recall
+corrections. Transfer to Vitral preserved its repository and Release identity.
+
+The PR #9 historical 260-test result belongs to that earlier code, not all
+subsequent main commits. Display, structural fidelity and model continuation
+remain distinct checks. The current human pilot stays pinned to v0.1.0 unless
+its version is explicitly changed; never mix participant versions silently.
 
 ## Procedure for a future authorized release
 

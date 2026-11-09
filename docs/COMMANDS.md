@@ -181,7 +181,7 @@ Flags:
 - `--must`: require a term somewhere in the candidate session
 - `--min-coverage`: require a minimum number of covered clues
 - `--turns-only`: search only real user/assistant turns. This is the v0.1.0 default;
-  on main (Unreleased), default recall also includes readable historical tool
+  starting with v0.1.1, default recall also includes readable historical tool
   results with source lines and call IDs. Use `--type tool_result` for those alone.
   After upgrading, `csl index` refreshes older cached entries once, preserving notes.
 - `--artifacts`: search only commands, commits, patches, and files

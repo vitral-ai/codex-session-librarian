@@ -10,6 +10,7 @@ This responsibility does not promise support for every future internal format.
 | CLI / version | Environment | Operations and limits | Evidence |
 | --- | --- | --- | --- |
 | Codex 0.166.0 | Linux x86_64 | Local library, native transfers/forks; explicit conversion/migration remain experimental | Native load, regression and synthetic continuation evidence |
+| Codex 0.167.0 | Linux x86_64 | v0.1.1 candidate: native load/display/import/migration regression paths; conversion remains experimental | 268-test isolated suite on 2026-11-09, no skips; no new model-continuation claim |
 | Claude Code 2.1.308 | Linux x86_64 | Basic discovery and native transfer; explicit conversion experimental; advanced library/search not integrated | Localhost request reconstruction and separate synthetic continuation evidence |
 | Other CLI versions | Not established | Do not infer support from a successful JSON parse | Record tested or unverified per operation |
 | macOS / Windows | Not established in this validation | No support certification from Linux runs | Dedicated tests required before changing claims |

@@ -1,5 +1,8 @@
 # Historical tool display validation (issue #7)
 
+This correction is included in v0.1.1. The v0.1.0 references below identify its
+unchanged earlier baseline, not the new patch release.
+
 Base: published `v0.1.0`, commit
 `edd05bb20eb145dea6178d548f1363b9516102af`. This fix is a later change; it does
 not change the existing tag or claim the released version already includes it.

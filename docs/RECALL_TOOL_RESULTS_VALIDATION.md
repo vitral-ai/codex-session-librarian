@@ -1,6 +1,6 @@
 # Historical tool-result retrieval
 
-Unreleased correction based on main
+Correction included in v0.1.1, based on main
 `3a6dfe42b9bc7b8c715ed22096a21a9306303bf0`; **not in published v0.1.0**.
 Code and regression-test identity is recorded by the containing PR/commit.
 
