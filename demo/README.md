@@ -12,7 +12,7 @@ checkout. No native Codex/Claude binary, login, dependency installation or netwo
 is required:
 
 ```bash
-python3 demo.py --repo /path/to/codex-session-librarian --out offline-reproduction.json
+python3 demo.py --repo /path/to/context-session-librarian --out offline-reproduction.json
 ```
 
 The script creates its own fixed synthetic Codex and Claude fixtures and runs the
@@ -52,7 +52,7 @@ sessions in an already authenticated, explicitly dedicated test home. It never
 copies credentials or starts login. Do not pass a personal/custom production home:
 
 ```bash
-python3 demo.py --repo /path/to/codex-session-librarian \
+python3 demo.py --repo /path/to/context-session-librarian \
   --out live-reproduction.json --allow-paid \
   --live-codex-home /path/to/already-authenticated-synthetic-test-home
 ```

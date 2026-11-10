@@ -2,8 +2,10 @@
 
 ## Unreleased
 
-No changes recorded after the v0.2.0 candidate. Publication is established by its
-GitHub Release/tag and exact selected SHA, not this file alone.
+- Rename the visible product to Context Session Librarian (CSL), retaining the
+  `csl` command, existing repository URL, capabilities, formats and storage paths.
+- Simplify the README around installation, finding conversations and transfers;
+  retain experimental backup scope, dependencies and recovery-key requirements.
 
 ## 0.2.0 — 2026-11-10
 

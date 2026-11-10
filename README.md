@@ -1,418 +1,235 @@
-# Codex Session Librarian
+# Context Session Librarian
 
 **A Vitral project · Apache-2.0 · [csl.vitral.ai](https://csl.vitral.ai)**
 
-Find, reopen, clone, and share native Codex conversations, and transfer native
-Claude Code conversations, from your terminal or coding agent. CSL works with
-the actual JSONL history, not just a summary. See the maintained
-[CLI coverage matrix](docs/PROVIDER_MATRIX.md) for command-by-command scope.
+Find, reopen, clone, and share native Codex conversations from your terminal or
+coding agent. CSL also transfers native Claude Code conversations and offers
+experimental conversion between the two CLIs. It works with conversation history,
+including supported tool records, rather than just a summary. See the
+[command and compatibility matrix](docs/PROVIDER_MATRIX.md) for exact coverage.
 
 ## Install
 
-**Version v0.2.0:** use the fixed tag after confirming its
-[GitHub Release](https://github.com/vitral-ai/codex-session-librarian/releases/tag/v0.2.0).
-It adds **experimental manual Linux/Codex encrypted backup**, incrementals,
-recovery and future recipient rotation. Existing transfer/library commands remain
-available. Exact publication SHA and validation belong to the Release record;
-a prepared version string does not establish publication.
+Requires Linux and Python 3.11+. The core CLI uses only the Python standard
+library; no virtualenv or pip installation is needed.
 
 ```bash
-git clone --branch v0.2.0 https://github.com/vitral-ai/codex-session-librarian.git
-cd codex-session-librarian
+git clone --branch v0.2.0 https://github.com/vitral-ai/codex-session-librarian.git context-session-librarian
+cd context-session-librarian
 ./install.sh
+csl --version
 ```
 
-Requirements: Linux and Python 3.11+. Make sure `~/.local/bin` is on `PATH`.
-No virtualenv or pip install is needed for the core CLI. An optional prefix is
-supported: `./install.sh /usr/local`. Keep the checkout: the installed launcher
-points to it. Opening a model session also requires its native CLI and your own
-authentication. Optional team exchange needs GitHub CLI; local library/ZIP
-operations do not require an account or paid model calls.
+Make sure `~/.local/bin` is on `PATH`. Keep the checkout: the installed launcher
+points to it. You can choose another installation prefix with `./install.sh PREFIX`.
+Published v0.2.0 uses the previous name, Codex Session Librarian; development uses
+Context Session Librarian, with the same `csl` command.
 
-Check `git rev-parse HEAD` and `csl --version` after installation. The version
-string alone does not identify a development checkout's commit.
+Opening a conversation requires its native CLI and your own authentication.
+Local search and ZIP transfers need no GitHub account or paid model calls.
+Team exchange additionally requires [GitHub CLI](https://cli.github.com/).
+For development, clone without `--branch v0.2.0` in a separate directory;
+see [release history](CHANGELOG.md) for published changes.
 
-### Development versus the published release
+## Find And Reopen A Conversation
 
-Version v0.2.0 includes backup F0–F3: bounded encrypted containers,
-manual native/portable checkpoints, explicit logical-head incrementals, durable
-resume, partial coverage, source fencing and reviewed future recipient rotation.
-Backup remains **experimental, Linux/Codex only**, separate from share/migrate.
-It requires an externally installed pinned **age1.3.2**, an existing private
-GitHub repository and explicit operational/external public recipients. Private
-identities travel through manual stdin/memory/FD or a system-keyring reference.
-Manual recovery is tested; **positive keyring/headless operation is not validated**.
-There are no backup timers, automatic retention/GC or historical re-encryption;
-F4/F5 and new human recovery pilots are not included. Start with the
-[backup manual](docs/BACKUP.md) and synthetic fixtures.
-
-[v0.1.1](https://github.com/vitral-ai/codex-session-librarian/releases/tag/v0.1.1)
-remains the earlier historical-tool display/secret-review/recall release, with its
-268-test runtime record. v0.1.0 remains unchanged at
-`edd05bb20eb145dea6178d548f1363b9516102af`, with its253-test record. Historical
-tags, notes and participant data are preserved. The existing human pilot remains
-fixed to v0.1.0 unless its study version is explicitly changed; do not silently
-switch participants to v0.2.0 or main. See [CHANGELOG](CHANGELOG.md),
-[release records](RELEASE.md) and [compatibility evidence](docs/COMPATIBILITY_MAINTENANCE.md).
-Future main commits after a tag are development until separately released.
-
-To follow development in a separate checkout:
+Build a local Codex index, then search for a discussion and reopen its UUID:
 
 ```bash
-git clone https://github.com/vitral-ai/codex-session-librarian.git csl-development
-cd csl-development
-./install.sh
-git pull --ff-only
+csl index
+csl recent --limit 20
+csl recall "database migration"
+csl search database migration
+csl show SESSION_UUID --messages 20 --include-assistant
+codex resume --all SESSION_UUID
 ```
 
-Record the exact SHA when testing development. Do not run `git pull` in the
-pinned release checkout to update it or silently replace a participant's version.
+Search uses local SQLite and lexical ranking, not embeddings. It indexes readable
+messages and supported tool text; opaque/media content is not searchable text.
+The private index may contain sensitive conversation and tool output. Default
+indexing covers active sessions; `index --sessions-dir` can include archives.
+Use `csl cockpit` for an interactive browser.
 
-## Try A Synthetic Handoff
+If an imported conversation opens by UUID but is missing from Codex's resume
+picker, run `csl index --native`. Imports request this native refresh automatically
+when Codex is installed. See the [command reference](docs/COMMANDS.md).
 
-For an isolated demonstration before using your own history, run from this checkout:
+## Transfer A ZIP Without GitHub
+
+```bash
+csl export SESSION_UUID --to ~/Downloads/handoff.csl.zip
+csl import ~/Downloads/handoff.csl.zip --list
+csl import ~/Downloads/handoff.csl.zip --cwd ~/work/project --open
+```
+
+Use an existing local project directory. Selectors can be UUIDs, unambiguous
+prefixes, indexed names or JSONL paths; multiple selectors can share one ZIP.
+`--list` validates and inspects without importing. Imports create new UUIDs and
+leave originals unchanged. Omit `--open` to import without launching the native CLI.
+
+Export/share performs a **partial secret scan** of readable text. Findings need
+a per-value terminal decision, or explicit `--allow-secrets` / `--scrub-secrets`
+for unattended use. Binary and opaque attachments are not scanned. Review the
+contents before sharing; see [secret review and limits](docs/TRANSFERS.md#partial-secret-review-before-export-or-share).
+
+Default portable export removes encrypted reasoning/state while preserving
+conversation and tool history. This is **not secret redaction**. `--raw` keeps
+opaque encrypted content, which may not work with another account. A transfer ZIP
+is separate from the encrypted backup feature below. See [portable transfers](docs/TRANSFERS.md).
+
+## Share Through A Private GitHub Exchange
+
+Each person connects with their own GitHub account to an existing private
+exchange repository, separate from this public code repository:
+
+```bash
+gh auth login
+csl team connect OWNER/PRIVATE-EXCHANGE
+csl share SESSION_UUID --title "Database migration handoff"
+```
+
+On the receiving computer:
+
+```bash
+csl inbox
+csl receive csl-SHARE_ID --cwd ~/work/project --open
+```
+
+Use the actual `csl-xxxxxxxxxxxx` ID printed by `share` or `inbox`. Packages are
+GitHub Release assets; you do not need to clone the exchange or commit ZIPs.
+Receiving the same snapshot reuses your local copy; add `--new` for another
+independent copy. `csl inbox --json` fetches metadata without downloading transcripts.
+
+Put CSL options before `--open`: everything after it goes literally to the native
+CLI. CSL does not add approval or sandbox bypass flags. See
+[team sharing](docs/SHARING.md) and [team installation](docs/TEAM_INSTALL.md).
+
+## Claude Code And Conversion
+
+Discover and transfer Claude Code conversations with:
+
+```bash
+csl sessions --provider claude --query "backend"
+csl export CLAUDE_UUID --to ~/Downloads
+csl share CLAUDE_UUID --title "Backend handoff"
+```
+
+Export/share searches both local histories and detects the CLI. If both match,
+select `--provider codex` or `--provider claude`. Receive/import detects the CLI
+from the package: `--provider` asserts its source, it does not convert it.
+Search, recall and cut commands remain Codex-only. Both sides need a CSL version
+with Claude transfer support; inspect `csl capabilities` for coverage.
+
+Conversion is explicit and **experimental**:
+
+```bash
+csl convert SESSION_UUID --to claude --cwd ~/work/project
+csl receive csl-SHARE_ID --target codex --cwd ~/work/project
+```
+
+The supported profile includes text, completed tools, references, embedded images
+and PDFs. Unsupported assets and opaque context are rejected rather than silently
+discarded. Image/PDF conversion needs the optional isolated decoder installed with
+`./install-media.sh`; untrusted media should require Linux bubblewrap via
+`CSL_MEDIA_SANDBOX=required`. External paths, URLs and file IDs are not collected.
+See [conversion, decoder dependencies and continuity limits](docs/CONVERSION.md).
+
+Successful import or `csl doctor SESSION_UUID --native --json` does not prove live
+model recall or that the history fits every model's context. Doctor checks request
+reconstruction in isolated homes against localhost without generation.
+[Live verification](docs/LIVE_VERIFICATION.md) is a separate, explicitly paid,
+synthetic-only operation.
+
+## Experimental Encrypted Backup
+
+Manual encrypted backup is **Linux/Codex only**. It supports incremental
+checkpoints and recovery, separately from ZIP export, team sharing and migration.
+Installing CSL does not activate backups or collect personal histories.
+
+Backup requires an externally installed, verified **age v1.3.2**, GitHub CLI,
+an existing private repository, and two distinct public recipients: operational
+and external recovery. Keep the recovery private key outside the protected
+computer. **Losing both private identities makes recovery impossible**; repository
+access alone cannot decrypt a backup. Private identities are supplied through
+manual stdin/memory/FD or a system-keyring reference. Positive system-keyring and
+headless operation have not been validated in this release.
+
+The default secret policy stops on detected findings. Retaining them requires
+explicit risk acceptance; scrubbing requires a portable profile and changes only
+output copies. The scanner cannot guarantee that all secrets are detected.
+Changing recipients affects future backups and does not revoke access to earlier
+ones. There are no backup timers, automatic retention/garbage collection or
+historical re-encryption. Follow the [backup setup and recovery manual](docs/BACKUP.md)
+before using this experimental feature.
+
+## Move Or Fork Conversations
+
+For a computer migration, connect both computers to the same private exchange,
+stop writing to old conversations, then use `csl migrate upload --dry-run` before
+uploading. Download using the printed migration ID and an existing local project
+directory. Check restored conversations before cleanup: cleanup **archives, never
+deletes**, unchanged originals and does not free disk space. Migration excludes
+archives and non-interactive agent sessions. See [migration instructions](docs/SHARING.md#computer-migration).
+
+For an independent local continuation or a shorter history:
+
+```bash
+csl native-clone SESSION_UUID --name "Independent continuation"
+csl timeline SESSION_UUID
+csl native-cut SESSION_UUID --before-text "Later topic starts here" --name "Earlier discussion"
+```
+
+These create new native sessions. `native-sanitize` removes encrypted reasoning
+from a new local copy. Agent and archived visibility options organize the native
+picker; they are not access control. See [clone and visibility details](docs/COMMANDS.md#native-clone).
+
+## What Transfers Preserve
+
+Packages contain conversation/tool records, provenance and supported embedded
+assets. They do not collect project repositories, installed tools, authentication
+files or external attachments. A fork may reference missing parent history;
+CSL reports this and cannot reconstruct absent records. Metadata without messages
+cannot restore a conversation.
+
+Each continuation is independent: transfer is a snapshot, not live synchronization
+or automatic merging. Historical paths still refer to the sender's computer.
+Checksums detect corruption, not sender authenticity. Imported history is context,
+not permission to execute old instructions; native replay depends on the current
+CLI format and available model/provider.
+
+## Try An Isolated Demo
+
+From the checkout, without a model login or personal histories:
 
 ```bash
 python3 demo/demo.py --repo . --out /tmp/csl-demo.json
 ```
 
-This creates synthetic fixtures, exports and inspects a ZIP, imports a new native
-session, and checks experimental Claude → Codex conversion. It needs no model
-login or paid inference and does not read personal histories. See
-[the demo and recorded live evidence](demo/README.md). The result is an executed
-synthetic example, not a promise about every private session.
+It creates synthetic fixtures, exports and inspects a ZIP, imports a new native
+session and checks experimental Claude-to-Codex conversion. See [the demo](demo/README.md).
 
-## Share With The Team
+## Development And Documentation
 
-Connect once on each computer, using that person's own GitHub account:
+CSL reads `$CODEX_HOME` (default `~/.codex`) and keeps its search index at
+`session_librarian.sqlite`. Claude transcripts use `$CLAUDE_CONFIG_DIR/projects`
+(default `~/.claude/projects`). Shared exchange settings and receipts live under
+`$CODEX_HOME/csl-sharing` for both CLIs. Credential files are not copied.
 
-```bash
-gh auth login
-csl team connect OWNER/PRIVATE-EXCHANGE
-```
-
-The exchange is **private** and separate from this public code repository.
-Accept the collaborator invitation to gain access. Packages are GitHub Release
-assets; nobody needs to clone the exchange, commit ZIPs, manage branches, or
-make a PR to share a conversation.
-
-Send:
-
-```bash
-csl share SESSION_UUID --title "Workspace publishing discussion"
-```
-
-CSL exports a portable snapshot and prints its share ID and private GitHub link.
-You can share several session UUIDs in one command. Without a selector, a
-numbered local picker is available in an interactive terminal.
-
-Receive:
-
-```bash
-csl inbox
-csl receive csl-SHARE_ID --cwd ~/Documents/projects --open
-```
-
-Use the actual `csl-xxxxxxxxxxxx` ID printed by `share` or `inbox`.
-`receive` downloads, validates, imports with new UUIDs and opens the native CLI.
-The directory must exist locally. Omit `--open` to get the resume command
-without launching Codex. Omit the share ID for an interactive inbox picker.
-
-Put CSL options before `--open`. Everything after it is passed literally to
-the session's CLI (also supported by `csl import`):
-
-```bash
-csl receive csl-SHARE_ID --cwd ~/Documents/projects --new --open --model MODEL
-```
-
-For an explicitly unsandboxed launch, append
-`--dangerously-bypass-approvals-and-sandbox` after `--open`. This disables Codex
-approvals and sandboxing; CSL never adds it automatically. For Claude Code,
-the corresponding explicit bypass flag is `--dangerously-skip-permissions`;
-CSL does not translate flags between CLIs.
-
-### Claude Code
-
-```bash
-csl sessions --provider claude --query "backend"
-csl share CLAUDE_UUID --title "Claude handoff"
-csl export CLAUDE_UUID --to ~/Downloads
-```
-
-`share` and `export` also work without `--provider`: CSL searches both local
-histories and detects the CLI from the unique match. If both CLIs match, it
-stops and asks for `--provider codex` or `--provider claude`; within one CLI,
-use a more specific UUID or file path. Explicit `--provider` remains an optional
-lookup filter. File paths are detected from transcript contents, not filenames.
-
-Receive/import auto-detects the CLI from the package. All CSL options go before
-`--open`, then native CLI options follow:
-
-```bash
-csl receive csl-SHARE_ID --cwd ~/work/project --open --model haiku
-csl receive csl-SHARE_ID --cwd ~/work/project --provider claude --open --dangerously-skip-permissions
-```
-
-Use your real share ID. `--provider` on receive/import asserts the source CLI,
-not conversion; `--target` explicitly converts it (experimental multimodal profile). Claude
-exports/shares require updated CSL on both sides. Search/recall/cut commands
-remain Codex-only; basic Claude discovery uses `sessions`. Inspect the full
-matrix with `csl capabilities` or `csl capabilities --json`.
-
-### Conversion And Continuity
-
-```bash
-csl convert SESSION_UUID --to claude --cwd ~/work/project
-csl receive csl-SHARE_ID --target codex --cwd ~/work/project --open
-csl convert SESSION_UUID --to canonical --out ~/Downloads/conversation.json
-csl doctor SESSION_UUID --native --json
-```
-
-Conversion preserves supported text/tools, references, embedded images and PDFs
-through a versioned canonical format;
-it rejects unsupported assets and opaque context instead of silently dropping
-them. Native imports print structural/context preflight evidence. `doctor --native`
-checks request reconstruction in isolated homes against localhost, without model
-generation or real credentials. It is not a claim of successful live recall or
-universal context fit. See [conversion and continuity](docs/CONVERSION.md).
-
-Image/PDF conversion requires the optional isolated decoder:
-
-```bash
-./install-media.sh
-```
-
-PNG, JPEG, static GIF and WebP are supported. PDFs retain their original bytes;
-Codex receives extracted text and rendered pages, including scanned pages.
-External paths/URLs/file IDs are not collected. For untrusted media, require
-Linux bubblewrap with `CSL_MEDIA_SANDBOX=required`; see the decoder limits in
-[conversion](docs/CONVERSION.md).
-
-`csl verify-live --allow-paid` separately tests synthetic continuations with
-explicit budgets and isolated histories. It is not run by ordinary transfers or
-`doctor`. See [setup, results and limits](docs/LIVE_VERIFICATION.md).
-
-Receiving the same snapshot again reuses your copy. Add `--new` to import
-another independent copy. Each continuation stays independent: this is a
-snapshot handoff, not live synchronization or automatic merging. Sharing a
-received session again records which snapshot it continues.
-
-Imports adapt modern visible-message events for Codex's standalone history UI,
-without changing the model's message records. If an older import shows only
-timings or completion events, update CSL and receive it again with `--new`.
-The sender does not need to export the same package again.
-This applies to the display-only issue. Packages with inconsistent compaction
-history/metadata are rejected: the sender must re-export the original session
-with updated CSL, rather than re-share a damaged imported copy.
-
-`csl inbox --json` provides structured metadata for agents without downloading
-the conversations. `csl team status` checks your connection.
-
-See [team sharing](docs/SHARING.md) and [team installation](docs/TEAM_INSTALL.md).
-
-## Share A ZIP Without GitHub
-
-```bash
-csl export SESSION_UUID --to ~/Downloads
-csl export SESSION_UUID ANOTHER_UUID --to ~/Downloads/team-handoff.csl.zip
-csl import ~/Downloads/team-handoff.csl.zip --list
-csl import ~/Downloads/team-handoff.csl.zip --cwd ~/Documents/projects --open
-```
-
-Export accepts UUIDs, unambiguous prefixes, indexed names, or JSONL paths.
-Archived and newly created sessions can be found by UUID without reindexing.
-Metadata-only histories are rejected because they do not contain messages.
-`--list` validates without importing.
-
-Export/share also perform a partial local secret scan before creating the ZIP.
-Findings require a per-value terminal decision, or explicit `--allow-secrets` /
-`--scrub-secrets` for unattended use. Binary/opaque attachments are not scanned;
-review remains your responsibility. See [review and limits](docs/TRANSFERS.md#partial-secret-review-before-export-or-share).
-
-Default export/share removes encrypted reasoning and opaque encrypted state
-for portability. `--raw` retains it, but may fail under a different account.
-Messages and tool history are preserved; originals are never changed.
-See [portable transfers](docs/TRANSFERS.md).
-
-## Find And Reopen A Conversation
-
-Published v0.1.0 indexes messages and selected commands, files, patches and commit
-evidence. Starting with **v0.1.1**, readable function/custom tool results are also
-indexed and included by default in `recall`, with source lines and call IDs.
-After updating development code, run `csl index`: unchanged files from older
-indexes are refreshed once, preserving annotations. `--turns-only` keeps a
-message-only query; `--type tool_result` restricts evidence to tool results.
-Opaque/media blocks are not converted into searchable text. For unindexed
-content, inspect the located source or use [canonical JSON export](docs/CONVERSION.md).
-The private local index can contain sensitive history, including tool text; it
-is not a sanitized export. Index/SQLite sidecars are restricted to owner access.
-
-```bash
-csl index --prune
-csl recent --limit 20
-csl recall "LinkedIn API token developer app" --anchor linkedin
-csl search vitral gtm
-csl show SESSION_UUID --messages 20 --include-assistant
-codex resume --all SESSION_UUID
-```
-
-If an imported conversation opens by UUID but is missing from Codex's resume
-picker, refresh both indexes without reimporting or changing its UUID:
-
-```bash
-csl index --native
-codex resume --all
-```
-
-Codex imports/receives now request this native metadata refresh automatically;
-batch migration refreshes once at the end, including partial restores. Codex
-must be installed for native refresh, but remains optional for importing files.
-This uses Codex's own scan-and-repair API, not direct SQLite edits or model calls.
-
-Search uses a local SQLite index and lexical ranking, not embeddings.
-`recall` helps with fuzzy remembered discussions; `find-work`, `patches`,
-and `pinpoint` help locate actual implementation work. Match snippets must
-be checked before claiming that a session is the right one.
-
-For an interactive local browser, use `csl cockpit`.
-For durable annotations:
-
-```bash
-csl annotate SESSION_UUID --summary "Publishing workspaces and visitor conversations." --tags "publishing, slides"
-```
-
-The default index covers active local sessions. Archived files can be indexed
-separately with `index --sessions-dir`; export/share also locate them directly.
-
-## Move All Codex Conversations To Another Computer
-
-Connect both computers to the same **private** session exchange with
-`csl team connect OWNER/PRIVATE-REPO`. Stop writing to the old conversations
-during migration. This is a loop over existing `share` and `receive`, not a new
-conversation format.
-
-```bash
-# Old computer: optionally preview, then upload everything in the normal resume list.
-csl migrate upload --dry-run
-csl migrate upload
-
-# New computer: use the migration ID printed above and an existing local directory.
-csl migrate download csl-migration-xxxxxxxxxxxx --cwd ~/projects
-
-# Old computer, only after checking the restored conversations on the new one.
-csl migrate cleanup csl-migration-xxxxxxxxxxxx
-csl migrate cleanup csl-migration-xxxxxxxxxxxx --confirm-restored
-```
-
-Upload excludes archives and non-interactive agent sessions, matching the normal
-`codex resume --all` scope. Download can be repeated without creating duplicate
-imports; partial uploads continue with `csl migrate upload --resume MIGRATION_ID`.
-Cleanup **archives, never deletes**, the unchanged originals; native Codex may
-also archive their spawned descendants. It does not free disk space or remove
-your login. Project files, installed tools and credentials are not transferred;
-all restored sessions use the chosen `--cwd`. See [migration details](docs/SHARING.md#computer-migration).
-
-Migration validation: **223 tests passed**, including 12 isolated end-to-end
-migration cases, a complete 125-session migration and a 257-session listing.
-Tests used separate Python environments/homes, real CSL/Codex binaries and a
-simulated GitHub exchange with networking blocked. See the
-[validation report and reproduction commands](docs/MIGRATION_VALIDATION.md).
-
-If an old portable copy blocks migration with a compaction history/metadata
-mismatch, explicitly enable the narrow legacy recovery on pending exports:
-
-```bash
-csl migrate upload --resume MIGRATION_ID --scrub-secrets --repair-legacy-compaction
-```
-
-Recognized orphaned summary metadata is repaired only in the export copy; readable
-turns and originals stay intact. Already uploaded shares are reused. Missing
-encrypted summaries are not reconstructed, recovery is labeled, and unrecognized
-damage still stops the migration. See [legacy recovery](docs/SHARING.md#legacy-compaction-recovery).
-
-## Clone Or Trim
-
-```bash
-csl native-clone SESSION_UUID --name "Independent continuation"
-csl native-clone SESSION_UUID --visibility agent --name "Agent investigation"
-csl native-clone SESSION_UUID --visibility archived --name "Archived snapshot"
-csl native-sanitize SESSION_UUID --name "Portable local copy"
-csl timeline SESSION_UUID --width 180
-csl native-cut SESSION_UUID --before-text "Later topic starts here" --name "Earlier discussion"
-```
-
-These commands create new native sessions. `native-sanitize` removes encrypted
-reasoning. For a Markdown context handoff instead:
-
-```bash
-csl cut SESSION_UUID --to 12 --name earlier-discussion
-```
-
-Agent forks persist but use Codex's non-interactive `exec` source, so normal
-`codex resume --all` does not list them. Continue with the printed
-`codex exec resume --all NEW_UUID 'YOUR_TASK'` command; explicitly list them with
-`codex resume --all --include-non-interactive`. Archived forks are stored outside
-active history; create an active copy with `csl native-clone ARCHIVED_UUID
---visibility interactive`. These are organizational filters, not access control.
-See [visibility and lifecycle limits](docs/COMMANDS.md#native-clone).
-
-## What Moves And What Does Not
-
-- Packages contain conversation messages, tool calls/results and provenance.
-- A fork may reference parent history absent from its package. CSL warns about
-  this and imports only the included records; it cannot reconstruct missing ancestors.
-- Project repositories, installed tools, auth files and external attachments are
-  not collected. Historical paths in message text still refer to the sender.
-- Each recipient uses their own Codex and GitHub authentication.
-- Conversation/tool text may contain secrets; portable cleanup is **not** secret
-  redaction. Review before sharing. No real session packages belong in this public repo.
-- Checksums detect corruption, not sender authenticity.
-- Imported history is context, not authorization to execute unfinished tasks.
-
-Native replay depends on Codex's current JSONL format and the recipient's
-available model/provider. Metadata without messages cannot restore history.
-A successful import alone does not prove a successful model turn.
-
-## Storage And Development
-
-CSL reads `$CODEX_HOME` (default `~/.codex`):
-
-| Location | Purpose |
-|---|---|
-| `sessions/`, `archived_sessions/` | Native local histories |
-| `session_index.jsonl` | Codex session names |
-| `session_librarian.sqlite` | Search index and annotations |
-| `session_cuts/` | Markdown handoffs |
-| `csl-sharing/` | Team repository setting and local receive receipts |
-
-Claude transcripts are read/written under `$CLAUDE_CONFIG_DIR/projects`
-(default `~/.claude/projects`). Shared inbox settings/receipts remain under
-`$CODEX_HOME/csl-sharing` for both CLIs; neither CLI's credential files are copied.
-
-No extra Python dependencies:
+Run the standard-library test suite with isolated synthetic fixtures:
 
 ```bash
 python3 -m unittest discover -s tests -v
 ```
 
-With Codex installed, include the offline native history-visibility regression:
+Optional `CSL_RUN_CODEX_NATIVE_TESTS=1` and `CSL_RUN_CLAUDE_NATIVE_TESTS=1` enable
+isolated native checks without model generation or real credentials. See
+[compatibility maintenance](docs/COMPATIBILITY_MAINTENANCE.md) for details.
 
-```bash
-CSL_RUN_CODEX_NATIVE_TESTS=1 python3 -m unittest discover -s tests -v
-```
-
-This uses an isolated temporary Codex home and makes no model requests.
-Add `CSL_RUN_CLAUDE_NATIVE_TESTS=1` to include the isolated Claude loader check
-against localhost, which stops before generation and uses no real API key.
-
-## Documentation
-
-- [Experimental encrypted backup manual](docs/BACKUP.md) — F1/F2 checkpoints, incremental heads and resume; F3 future recipient rotation; no timer or retention yet.
-- [CLI/provider command and content coverage](docs/PROVIDER_MATRIX.md)
-- [Canonical conversion and continuity checks](docs/CONVERSION.md)
-- [Team installation and contributions](docs/TEAM_INSTALL.md)
-- [Private GitHub sharing](docs/SHARING.md)
-- [Portable ZIP transfers](docs/TRANSFERS.md)
 - [Command reference](docs/COMMANDS.md)
+- [CLI/provider coverage](docs/PROVIDER_MATRIX.md)
 - [Session workflows](docs/SESSION_WORKFLOWS.md)
-- [Evolution](docs/EVOLUTION.md)
+- [Portable ZIP transfers](docs/TRANSFERS.md)
+- [Private GitHub sharing](docs/SHARING.md)
+- [Conversion and continuity](docs/CONVERSION.md)
+- [Experimental encrypted backup](docs/BACKUP.md)
+- [Release history](CHANGELOG.md) and [release records](RELEASE.md)

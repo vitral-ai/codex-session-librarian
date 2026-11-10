@@ -1,6 +1,6 @@
 # Team Install
 
-This guide is for a teammate or another local agent using Codex Session Librarian on Fedora 43 or a similar Linux environment.
+This guide is for a teammate or another local agent using Context Session Librarian on Fedora 43 or a similar Linux environment.
 
 ## What You Need
 
@@ -17,11 +17,15 @@ Puerta (`puertajs`) and Daniela (`danielaz7`) should accept their GitHub collabo
 invitation to get push access. The repository is public, so cloning/pulling does
 not require an invitation.
 
+The `csl` command and existing installation paths remain compatible with the
+previous product name. Fresh clones below use `context-session-librarian` as the
+local directory name; use your actual checkout path when updating.
+
 Clone the shared repository, then run:
 
 ```bash
-git clone https://github.com/vitral-ai/codex-session-librarian.git
-cd codex-session-librarian
+git clone https://github.com/vitral-ai/codex-session-librarian.git context-session-librarian
+cd context-session-librarian
 ./install.sh
 ```
 
@@ -125,7 +129,7 @@ Read [TRANSFERS.md](TRANSFERS.md) for limits and `--raw` behavior.
 ## Update And Contribute
 
 ```bash
-cd codex-session-librarian
+cd context-session-librarian
 git pull --ff-only
 ```
 
