@@ -13,7 +13,7 @@ import uuid
 import zipfile
 
 import csl_backup_format as fmt
-from csl_backup_core import (BackupBusy, MAX_MANIFEST, MAX_OBJECT, NORMAL_CONTAINER, NAMESPACE,
+from csl_backup_core import (BackupBusy, BackupStale, MAX_MANIFEST, MAX_OBJECT, NORMAL_CONTAINER, NAMESPACE,
     canonical, capture, header_source, zip_digest, zip_extract, hash_bytes, hash_file, json_read, locked, now, save, source_kind, uid, zip_preflight, zip_read)
 from csl_backup_crypto import BackupPolicyError
 from csl_backup_store import Control
@@ -100,6 +100,9 @@ class Backup:
             item = state["sets"].setdefault(config["set_id"], {"epoch": 0, "owner": "", "expires": 0,
                 "sources": {}, "intents": []})
             source = item["sources"].setdefault(config["source_id"], {"latest_complete": None, "latest_partial": None})
+            from csl_backup_keys import key_binding
+            if source.get("key_profile_binding") not in (None, key_binding(config)):
+                raise BackupStale("Configured key epoch is superseded; old writer/resume cannot publish")
             if acquire:
                 if expected_epoch is not None:
                     if item["epoch"] != expected_epoch:
@@ -367,6 +370,11 @@ class Backup:
         catalog = fmt.catalog(json_read(plain))
         if expected and expected.get("lease_epoch") is not None and catalog["lease_epoch"] != expected["lease_epoch"]:
             raise TransferError("Checkpoint lease epoch differs from committed control binding")
+        if expected and expected.get("profile_epoch") is not None:
+            from csl_backup_keys import epoch_id, key_binding
+            crypto = {**catalog["fingerprint"], **{k: catalog[k] for k in ("repo_id", "set_id", "source_id")}}
+            if expected["profile_epoch"] != epoch_id(crypto) or expected.get("key_profile_binding") != key_binding(crypto):
+                raise TransferError("Checkpoint key epoch differs from committed control binding")
         if (catalog["checkpoint_id"] != checkpoint or catalog["repo_id"] != self.github.repo_id or
                 set_id is not None and catalog["set_id"] != set_id or
                 source_id is not None and catalog["source_id"] != source_id):

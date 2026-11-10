@@ -6,7 +6,7 @@ from pathlib import Path
 import sys
 import uuid
 
-from csl_backup_core import BackupBusy, json_read, now, save, uid
+from csl_backup_core import BackupBusy, BackupStale, json_read, now, save, uid
 from csl_backup_crypto import Age, BackupPolicyError, operational_identity
 from csl_backup_engine import Backup
 from csl_backup_store import GitHub
@@ -27,7 +27,7 @@ def last_attempt(root, set_id=None, source_id=None):
 def command(args, csl):
     root = csl.DEFAULT_CODEX_HOME / "csl-backup"
     attempt = None
-    if args.backup_action in ("run", "restore", "verify"):
+    if args.backup_action in ("run", "restore", "verify") or (args.backup_action == "keys" and args.keys_action == "apply"):
         def safe_id(value):
             try:
                 return uid(value) if value else None
@@ -45,7 +45,21 @@ def command(args, csl):
             raise SystemExit(2) from None
     try:
         config = None
-        if args.set:
+        if args.backup_action == "keys":
+            from csl_backup_keys import configuration_path
+            if args.keys_action == "apply":
+                planned = json_read(args.plan)
+                if not isinstance(planned, dict):
+                    raise BackupStale("Unknown key rotation plan")
+                if planned.get("set_id") != args.set or args.source and planned.get("source_id") != args.source:
+                    raise BackupStale("Explicit set/source differs from the rotation plan")
+                args.source = uid(planned.get("source_id"))
+            path = configuration_path(root, args.set, args.source)
+            from csl_backup_format import config as check_config
+            config = check_config(json_read(path))
+            if attempt:
+                attempt.update(repo_id=config["repo_id"], source_id=config["source_id"])
+        if args.set and args.backup_action != "keys":
             path = root / "sets" / (uid(args.set) + ".json")
             if args.source and (root / "sets" / args.set / (uid(args.source) + ".json")).exists():
                 path = root / "sets" / args.set / (args.source + ".json")
@@ -58,7 +72,10 @@ def command(args, csl):
                     attempt.update(repo_id=config["repo_id"], source_id=config["source_id"] if args.backup_action == "run" else attempt["source_id"])
         if args.backup_action == "run" and config and args.source and args.source != config["source_id"]:
             raise TransferError("Explicit --source differs from the configured origin; nothing uploaded")
-        if args.backup_action == "status" and args.cached:
+        if args.backup_action == "keys" and args.keys_action == "list":
+            from csl_backup_keys import list_epochs
+            result = list_epochs(None, config)
+        elif args.backup_action == "status" and args.cached:
             result = {"mode": "cached", "remote": "unknown; not queried",
                 "last_attempt": last_attempt(root, args.set, args.source),
                 "warning": "Cached success is not current availability or integrity"}
@@ -69,13 +86,25 @@ def command(args, csl):
             gh = GitHub(repo, expected_id=(config or {}).get("repo_id"), executable=args.github_cli)
             if attempt:
                 attempt["repo_id"] = gh.repo_id
-            needs_age = args.backup_action in ("init", "run", "restore", "verify")
+            needs_age = args.backup_action in ("init", "run", "restore", "verify") or (args.backup_action == "keys" and args.keys_action in ("plan", "apply"))
             backup = Backup(csl, gh, Age(args.age_bin) if needs_age else None)
             if args.backup_action == "init":
                 result = backup.initialize(set_name=args.set_name, source_name=args.source_name,
                     profile=args.profile, policy=args.secret_policy, recipients=args.recipient,
                     key_reference=args.key_reference, retain_accepted=args.accept_retain_risk,
                     include_agents=args.include_agent_forks, set_id=args.set)
+            elif args.backup_action == "keys":
+                from csl_backup_keys import plan_rotation, apply_rotation, list_epochs
+                if args.keys_action == "plan":
+                    result = plan_rotation(backup, config, args.recipient, key_reference=args.key_reference, output=args.out)
+                elif args.keys_action == "apply":
+                    attempt.update(stage="executing")
+                    save(root / "attempts" / (attempt["attempt_id"] + ".json"), attempt)
+                    result = apply_rotation(backup, config, args.plan)
+                    attempt.update(result="passed", finished_at=now(), summary=result)
+                    save(root / "attempts" / (attempt["attempt_id"] + ".json"), attempt)
+                else:
+                    result = list_epochs(backup, config)
             elif args.backup_action in ("list", "discover", "status"):
                 result = backup.discover(scan=getattr(args, "scan", False))
                 if "sets" in result:
@@ -124,7 +153,7 @@ def command(args, csl):
             except (OSError, ValueError):
                 print("csl backup: failed to persist latest failure; cached status may be stale", file=sys.stderr)
         print("csl backup: " + masked_diagnostic(str(error)), file=sys.stderr)
-        raise SystemExit(3 if isinstance(error, BackupPolicyError) else 4 if isinstance(error, BackupBusy) else 2) from None
+        raise SystemExit(5 if isinstance(error, BackupStale) else 3 if isinstance(error, BackupPolicyError) else 4 if isinstance(error, BackupBusy) else 2) from None
 
 
 def add_commands(subparsers, csl):
@@ -166,3 +195,21 @@ def add_commands(subparsers, csl):
         if name == "discover":
             sub.add_argument("--scan", action="store_true", help="Read-only candidate scan; does not repair pointers or certify checkpoints.")
         sub.set_defaults(func=lambda args, module=csl: command(args, module))
+
+    keys = actions.add_parser("keys", help="Plan/apply future recipient rotation; no historical re-encryption.")
+    key_actions = keys.add_subparsers(dest="keys_action", required=True)
+    for action in ("plan", "apply", "list"):
+        sub = key_actions.add_parser(action)
+        sub.add_argument("--repo")
+        sub.add_argument("--set", required=True)
+        sub.add_argument("--source", help="Select one existing local origin; never adopts a lost source.")
+        sub.add_argument("--github-cli", default="gh")
+        sub.add_argument("--age-bin", default="age")
+        sub.add_argument("--json", action="store_true")
+        if action == "plan":
+            sub.add_argument("--recipient", action="append", required=True, help="Exactly two new public X25519 recipients.")
+            sub.add_argument("--key-reference", help="Future stdin or keyring:UUID reference; no private material.")
+            sub.add_argument("--out", type=Path, help="Exclusive output plan path; default private local plan directory.")
+        if action == "apply":
+            sub.add_argument("--plan", type=Path, required=True)
+        sub.set_defaults(backup_action="keys", func=lambda args, module=csl: command(args, module))

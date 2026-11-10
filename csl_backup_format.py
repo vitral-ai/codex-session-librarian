@@ -31,18 +31,23 @@ def integer(value, low=0, high=2**63-1):
 
 
 def fingerprint(config):
-    return {"profile": config["profile"], "exporter": "csl-backup-" + config["profile"].split("-")[0] + "-v1",
+    value = {"profile": config["profile"], "exporter": "csl-backup-" + config["profile"].split("-")[0] + "-v1",
         "cipher": "age-v1-x25519", "recipients": Age.recipients(config["recipients"]),
         "secret_policy": config["secret_policy"], "detector": "csl-partial-readable-v1",
         "csl_version": csl_version.__version__, "exporter_version": EXPORTER_VERSION,
         "detector_version": csl_secrets.RULES_VERSION}
+    if "profile_epoch" in config:
+        value["profile_epoch"] = uid(config["profile_epoch"])
+    return value
 
 
 def validate_fingerprint(value):
     fields = {"profile", "exporter", "cipher", "recipients", "secret_policy", "detector"}
     versions = {"csl_version", "exporter_version", "detector_version"}
-    if not isinstance(value, dict) or set(value) not in (fields, fields | versions):
+    if not isinstance(value, dict) or set(value) not in (fields, fields | versions, fields | versions | {"profile_epoch"}):
         raise TransferError("Unknown backup fingerprint shape")
+    if "profile_epoch" in value:
+        uid(value["profile_epoch"])
     if versions <= set(value):
         if not isinstance(value["csl_version"], str) or not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+(?:[-+][A-Za-z0-9.-]+)?", value["csl_version"]):
             raise TransferError("Invalid producing CSL version")
@@ -68,11 +73,16 @@ def config(value):
     if value["profile"] == "native-age-v1" and value["secret_policy"] == "scrub":
         raise BackupPolicyError("Native byte-exact profile cannot scrub; explicitly select portable-age-v1")
     Age.recipients(value.get("recipients"))
+    if "profile_epoch" in value:
+        uid(value["profile_epoch"])
     if not isinstance(value.get("key_reference"), str) or not (value["key_reference"] == "stdin" or
             re.fullmatch(r"keyring:[0-9a-f-]{36}", value["key_reference"])):
         raise BackupPolicyError("Backup key must be an explicit memory/keyring reference, never a plaintext fallback")
     if value.get("secret_policy") == "retain" and value.get("retain_accepted") is not True:
         raise BackupPolicyError("Retaining possible secrets requires explicit profile-scoped acceptance")
+    if "key_epochs" in value:
+        from csl_backup_keys import epochs
+        epochs(value)
     return value
 
 

@@ -39,6 +39,8 @@ def coverage():
                 "manual_full_checkpoints": True, "incremental_reuse": True, "durable_resume": True,
                 "multiple_sources": True, "partial_checkpoints": True, "catalog_reader_schemas": [1, 2],
                 "catalog_writer_schema": 2, "evidence_policy": "light-each-run-full-30d-v1",
+                "future_recipient_rotation": "explicit source-scoped keys plan/apply; public epoch map",
+                "historical_reencryption": False, "native_sanitized_profile": False,
                 "scheduling": False, "pruning": False,
                 "profiles": ["native-age-v1", "portable-age-v1"], "encryption": "age-v1-x25519; objects and detailed catalogs",
                 "custody": "explicit manual stdin or system-keyring reference; external recovery identity required",

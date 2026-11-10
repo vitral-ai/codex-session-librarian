@@ -3,7 +3,9 @@
 Experimental Linux/Codex functionality in this development branch, not included
 in published v0.1.1. F1 provides manual encrypted capture/restore; F2 adds
 conversation-level incrementals, explicit resume, partial coverage and multiple
-origins. Scheduling, key rotation and retention remain later cuts.
+origins. F3 adds reviewed future recipient rotation; scheduling and retention
+remain later cuts. Historical re-encryption and native-sanitized profiles are not
+selected in this scope.
 No real-data activation or new software release is authorized by this document.
 
 ## Scope and custody
@@ -220,6 +222,70 @@ Upload bytes count attempted submissions; download bytes count received bytes.
 Identity-checking wrappers, laboratory inventory checks and CDN redirects add their
 own calls and are recorded separately by the laboratory. These are measurements,
 not a provider quota or sustained throughput promise.
+
+## Future recipient rotation (F3)
+
+Rotation changes the future writer configuration for **one explicitly selected
+local source**. It preserves profile, stop/retain/scrub policy and existing risk
+acceptance. More than one local source requires `--source`; the plan lists affected
+and unaffected remote sources. Nothing is inferred from hostname or an old history.
+
+```bash
+csl backup keys plan --set SET_UUID --source SOURCE_UUID \
+  --recipient NEW_PUBLIC_OPERATIONAL_RECIPIENT \
+  --recipient NEW_PUBLIC_EXTERNAL_RECOVERY_RECIPIENT \
+  --key-reference stdin --out /PRIVATE/rotation-plan.json
+
+csl backup keys apply --set SET_UUID --source SOURCE_UUID \
+  --plan /PRIVATE/rotation-plan.json
+csl backup keys list --set SET_UUID --source SOURCE_UUID
+```
+
+Public recipient placeholders above are not private identities. Optional
+`--key-reference` chooses future stdin/keyring:UUID custody; omitted, the existing
+reference remains. No keyring is populated, old identity removed or private key
+generated. A pinned age encryption probe checks public-recipient acceptance;
+it does not establish private-key possession, recovery or unattended custody.
+The public epoch map is private local metadata; `keys list` works offline without
+GitHub or age and does not claim that a key is currently available.
+
+A reviewed plan contains public old/new recipients, profile/policy, source and
+epoch IDs, exact current config/producer binding, current set generation, complete
+and latest source checkpoint bindings, retained epoch dependencies and recovery
+instructions. A private local reservation hashes the plan; edited public values
+also require a new plan. Any set-generation, config, producer or source-state change
+makes it stale (exit5), rather than changing the reviewed meaning. A valid active
+writer blocks apply; an expired writer is fenced by a new generation.
+
+Apply commits an opaque key-profile/epoch binding through the existing control
+CAS chain, then atomically installs the future local config. Public recipients,
+labels, keyring references and private material do not enter control. A durable
+local intention and stable remote rotation ID let the same plan reconcile after
+accepted-write/response loss, a crash before config write or before local receipt.
+A conflicting local edit is preserved; a later rotation makes the older plan
+inapplicable. Old writers and old pending resumes cannot publish with a superseded
+crypto profile, even after acquiring a new execution generation.
+
+The first run after rotation creates new ciphertext from current eligible source
+files. It does not require the new operational identity to decrypt the old epoch's
+catalog, does not reuse old-only ciphertext and does not invent freshness for
+missing old local conversations. Old checkpoint UUIDs and encrypted assets remain
+unchanged; their private identities are still required. If a new run has not yet
+completed, `latest` can still refer to the old epoch and requires its identity.
+Use an explicitly held external identity through stdin when recovering that CP.
+
+The map records public recipients per profile epoch, known prior pointer UUIDs and
+custody references; legacy entries are derived from local config, not an audit of
+all historical objects. Keep every external identity needed by retained epochs,
+and **test recovery of the retained checkpoints before retiring an operational
+identity**. New objects have their own full verification and per-member restore
+receipts; rotating does not inherit restored/native_passed from old ciphertext.
+
+Historical re-encryption and a native-sanitized profile are N/A for this selected
+cut. Native+scrub remains rejected; portable scrub stays explicit. No old asset is
+overwritten/deleted, no old catalog rewritten and no downloaded ciphertext revoked.
+Removing a future recipient does not remove that recipient's access to older bytes.
+No timer, deletion permission, account change or new algorithm is introduced.
 
 ## Maintenance
 

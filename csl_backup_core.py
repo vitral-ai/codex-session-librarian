@@ -28,6 +28,11 @@ class BackupBusy(TransferError):
     pass
 
 
+class BackupStale(TransferError):
+    """A reviewed operation no longer matches its reserved state."""
+    pass
+
+
 def now():
     return dt.datetime.now(dt.timezone.utc).isoformat().replace("+00:00", "Z")
 

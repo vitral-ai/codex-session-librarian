@@ -49,6 +49,13 @@ def _previous(backup, config, identity, directory):
     identifier = source.get('latest_checkpoint') or base
     if not identifier:
         return base, None, None
+    if identifier == source.get('rotation_boundary_checkpoint'):
+        # New operational identities need not decrypt the previous epoch.
+        # Rotation forces fresh future objects; old CPs stay independently
+        # recoverable with their external identities and unchanged pointers.
+        from csl_backup_keys import key_binding
+        if source.get('key_profile_binding') == key_binding(config):
+            return base, None, identifier
     previous_dir = directory / 'previous'
     previous_dir.mkdir()
     previous, _ = backup._read_checkpoint(identifier, identity, previous_dir,
@@ -387,8 +394,11 @@ def run(backup, config, identity, *, dry_run=False, resume=None):
                 raise TransferError('Catalog envelope differs')
             backup._lease(config, run_id, expected_epoch=epoch, base_checkpoint=plan['base_checkpoint'], source_base=plan['base_source_checkpoint'])
             backup.github.finalize(plan['checkpoint_id'], 'c', published['release_id'])
+            from csl_backup_keys import epoch_id, key_binding
             pointer = {'release_id': published['release_id'], 'asset_id': published['asset']['id'],
-                       'bytes': checked.stat().st_size, 'sha256': hash_file(checked), 'lease_epoch': binding['artifact_epoch'], 'commit_epoch': epoch}
+                       'bytes': checked.stat().st_size, 'sha256': hash_file(checked), 'lease_epoch': binding['artifact_epoch'], 'commit_epoch': epoch,
+                       'profile_epoch': epoch_id(config),
+                       'key_profile_binding': key_binding(config)}
             backup._lease(config, run_id, checkpoint=plan['checkpoint_id'], catalog_binding=pointer,
                 partial=bool(failures), expected_epoch=epoch, base_checkpoint=plan['base_checkpoint'], source_base=plan['base_source_checkpoint'])
             result = {'status': catalog['status'], 'checkpoint_id': plan['checkpoint_id'], 'run_id': run_id,
