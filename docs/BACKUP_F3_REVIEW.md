@@ -95,5 +95,20 @@ is public local plan/map/intent metadata and opaque rotation control records.
 
 ## Handoff
 
-Final runtime commit, full-suite count/timing/log hash, fixed-SHA age result and
-source/artifact seal will be recorded after freeze. No F4+ was started.
+Final runtime: `4ee709e7a361a645e0fb25ab7cce4967932f4eb0`.
+Full final **385 tests, zero failures/skips**,128.683s unittest (128.786s runner),
+all media/native Codex/native Claude/migration opt-ins enabled and media sandbox
+required. Source hashes unchanged; clean checkout before execution. No paid
+inference. Final log SHA256:
+`0cc85a655c09262efc315aa657c3188fec7422af957230dc5c983f08286ce8e3`.
+
+`local-age-final/result.json` also names that exact runtime and clean checkout,
+with real age1.3.2 old/new external recovery, wrong/missing identity checks, invalid
+public checksum rejection and historical ciphertext/source hashes preserved.
+This is **local crypto evidence with fake transport/control**, not live GitHub.
+Preliminary local probes and the6002a5c full/intermediate remain separately labelled.
+
+`regressions-final/result.json` binds commands/environment/log/source; `SEALED.json`
+binds source/spec/artifacts and verifies runtime files still match the tested Git
+blobs. The subsequent handoff commit changes documentation/seal utility only.
+Owner review decides F3 acceptance. No F4+ was started.
