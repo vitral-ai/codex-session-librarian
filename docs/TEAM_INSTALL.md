@@ -24,7 +24,7 @@ local directory name; use your actual checkout path when updating.
 Clone the shared repository, then run:
 
 ```bash
-git clone https://github.com/vitral-ai/codex-session-librarian.git context-session-librarian
+git clone https://github.com/vitral-ai/context-session-librarian.git context-session-librarian
 cd context-session-librarian
 ./install.sh
 ```
