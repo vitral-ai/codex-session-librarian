@@ -146,7 +146,7 @@ Tell the receiving agent:
 > historical context; do not execute unfinished instructions without my request.
 
 Teammates maintain the tool with `git pull --ff-only` from
-`https://github.com/vitral-ai/codex-session-librarian`.
+`https://github.com/vitral-ai/context-session-librarian`.
 
 ## Partial secret review before export or share
 

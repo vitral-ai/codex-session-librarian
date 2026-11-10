@@ -2,6 +2,33 @@
 
 ## Version records
 
+### v0.2.1 — release candidate
+
+This patch release adopts the visible name **Context Session Librarian (CSL)**
+and simplifies the README around installation, finding conversations and transfers.
+The `csl` command, `csl.vitral.ai`, provider coverage, formats, IDs and storage paths
+remain compatible. The canonical repository is now
+[`vitral-ai/context-session-librarian`](https://github.com/vitral-ai/context-session-librarian).
+It adds no new backup or transfer capabilities.
+
+Backup remains experimental, manual and Linux/Codex only, with externally
+installed age v1.3.2 and operational/external recovery recipients. Positive
+system-keyring/headless operation is unvalidated; scheduling, automatic retention
+and historical re-encryption are not included. Published v0.1.x/v0.2.0 tags and
+notes remain unchanged.
+
+The producing CSL version is part of the backup fingerprint. Updating to 0.2.1
+therefore starts a fresh capture instead of reusing objects from a different
+producer version. Old checkpoints retain their original fingerprints and key
+requirements; finish pending runs or rotation plans with their producing version
+before updating. This patch does not re-encrypt old backups.
+
+Validation belongs to this candidate's own fixed SHA: full media/native/migration
+opt-in suite, isolated-prefix install/version/help and offline synthetic demo.
+Actual results and the published commit belong to the corresponding GitHub
+Release; no earlier result is attributed to this candidate. Preparation alone
+does not establish publication.
+
 ### v0.2.0 — authorized release candidate
 
 Luis authorized publication on2026-11-10. The owner selects and publishes the exact

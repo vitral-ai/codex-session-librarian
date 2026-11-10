@@ -1,9 +1,10 @@
 # Changelog
 
-## Unreleased
+## 0.2.1 — 2026-11-10
 
 - Rename the visible product to Context Session Librarian (CSL), retaining the
-  `csl` command, existing repository URL, capabilities, formats and storage paths.
+  `csl` command, capabilities, formats and storage paths. The canonical repository
+  URL is now `https://github.com/vitral-ai/context-session-librarian`.
 - Simplify the README around installation, finding conversations and transfers;
   retain experimental backup scope, dependencies and recovery-key requirements.
 

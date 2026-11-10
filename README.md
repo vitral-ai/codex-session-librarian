@@ -14,7 +14,7 @@ Requires Linux and Python 3.11+. The core CLI uses only the Python standard
 library; no virtualenv or pip installation is needed.
 
 ```bash
-git clone --branch v0.2.0 https://github.com/vitral-ai/codex-session-librarian.git context-session-librarian
+git clone --branch v0.2.1 https://github.com/vitral-ai/context-session-librarian.git context-session-librarian
 cd context-session-librarian
 ./install.sh
 csl --version
@@ -22,13 +22,13 @@ csl --version
 
 Make sure `~/.local/bin` is on `PATH`. Keep the checkout: the installed launcher
 points to it. You can choose another installation prefix with `./install.sh PREFIX`.
-Published v0.2.0 uses the previous name, Codex Session Librarian; development uses
-Context Session Librarian, with the same `csl` command.
+Context Session Librarian was previously named Codex Session Librarian; the
+`csl` command and existing installation paths remain compatible.
 
 Opening a conversation requires its native CLI and your own authentication.
 Local search and ZIP transfers need no GitHub account or paid model calls.
 Team exchange additionally requires [GitHub CLI](https://cli.github.com/).
-For development, clone without `--branch v0.2.0` in a separate directory;
+For development, clone without `--branch v0.2.1` in a separate directory;
 see [release history](CHANGELOG.md) for published changes.
 
 ## Find And Reopen A Conversation
@@ -157,6 +157,9 @@ headless operation have not been validated in this release.
 The default secret policy stops on detected findings. Retaining them requires
 explicit risk acceptance; scrubbing requires a portable profile and changes only
 output copies. The scanner cannot guarantee that all secrets are detected.
+Before updating CSL, finish pending backup runs and recipient-change plans with
+their original version. The first backup after a version update captures local
+conversations again; older checkpoints still require their original recovery keys.
 Changing recipients affects future backups and does not revoke access to earlier
 ones. There are no backup timers, automatic retention/garbage collection or
 historical re-encryption. Follow the [backup setup and recovery manual](docs/BACKUP.md)
