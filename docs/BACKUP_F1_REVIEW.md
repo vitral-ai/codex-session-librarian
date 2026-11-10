@@ -2,9 +2,10 @@
 
 Fecha: 2026-11-10. Rama `feat/backup-f1-manual`.
 Base F0: `32322850b7b341048448fd6d03cfacd82b3babd2`, sobre oficial v0.1.1.
-Estado: revision manual favorable de Manunruks, condicionada a commit, hashes y
-regresion final sin omisiones. No es release, activacion real o certificacion
-headless. F2 esta autorizada tras cerrar estas condiciones, sin pedir otro inicio.
+Estado: E1 manual revisada favorablemente por Manunruks; condiciones de fuente y
+regresion final cumplidas. Codigo probado: `3547d7b3cf3c0176896957197c10e2caf44f456a`.
+El commit de cierre posterior solo agrega informe/utility de hashes. No es release,
+activacion real o certificacion headless. F2 autorizada, sin pedir otro inicio.
 
 ## Alcance implementado
 
@@ -104,8 +105,9 @@ como si hubiese sido producido con las reglas nuevas.
 - `live-03`: native+portable, picker/reader, repeat, wrong key, cached failure y scrub.
 - `regressions-01`:323 tests opt-in, sin skips/fallos,214.792s, estado intermedio.
 - Candidato final:59 tests backup focales, incluyendo19 del laboratorio F0.
-- `regressions-final/result.json` + `tests.log`: comando/SHA/conteo final exactos;
-  consultar el resultado terminado, no inferir exito de un proceso en curso.
+- `regressions-final/result.json` + `tests.log`:327 pruebas, sin omisiones ni fallos,
+  193.511s, sobre el SHA fijo3547d7b. Todos los opt-ins media/native/migration
+  habilitados, sandbox media requerido; sin inferencia comercial.
 - Sealed manifest enlaza codigo final, spec y artefactos. No tags ni release nueva.
 
 Fingerprint incluye version real CSL, exporter version y reglas secretas. Cambios
