@@ -57,8 +57,14 @@ Intermediate code8575093 passed357 tests without skips/failures in139.6s,
 with source hashes unchanged. Owner review then found a missing reserved-plan ID
 comparison; it was reproduced and fixed before the next freeze. Additional local
 regressions cover checkpoint/base/epoch drift with0POST/control mutations, a newer
-same-source partial and unavailable reused references at resume. A fixed final-code
-full suite and source/artifact seal are recorded separately.
+same-source partial and unavailable reused references at resume. Final runtime: `bae1d79caea6ffb4b14372057d6787241a291736`.
+Full final361 tests, no skips/failures,144.917s unittest (145.022s runner), source
+hashes unchanged and worktree clean before execution. All media/native Codex/
+native Claude/migration opt-ins enabled; media OS sandbox required; no paid
+inference. Final log SHA256:
+`18e8a3349022cd8d2ee625da8e40076200dfa328a5120b3cdfad8ac3b7b9f17c`.
+`regressions-final/result.json` and `SEALED.json` bind commands/source/artifacts.
+The following handoff commit changes only documentation and the seal utility.
 
 | Requirement | Evidence | Result/scope |
 | --- | --- | --- |
@@ -75,8 +81,8 @@ full suite and source/artifact seal are recorded separately.
 
 Focal candidate:92 backup tests plus19 secret tests, including33 new backup and
 one new detector regression versus F1. Prefreeze full suite:353 tests, no skips
-or failures,156.790s (`regressions-01`). Final fixed-SHA full suite remains the
-candidate's decisive regression record; this prefreeze count is not substituted.
+or failures,156.790s (`regressions-01`). Final fixed-SHA full suite:361 tests, no skips/failures,144.917s, on the runtime
+above. It is the decisive regression record; the prefreeze count is not substituted.
 
 Real-age local scale:100707331bytes of synthetic fixtures (three~32MiB members),
 two captured plus excluded agent,67138220captured bytes and67159750final ciphertext
