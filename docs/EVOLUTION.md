@@ -1,6 +1,6 @@
 # CSL Evolution
 
-This file records why the Codex Session Librarian changes over time. It is intentionally written as an operator-facing design log, not a changelog of every small edit.
+This file records why the Context Session Librarian changes over time. It is intentionally written as an operator-facing design log, not a changelog of every small edit.
 
 ## 2026-06-23: Recall Mode For Fuzzy Conversation Memory
 

@@ -1,4 +1,4 @@
-# Codex Session Librarian
+# Context Session Librarian
 
 CSL is a local Python 3.11+ standard-library tool for finding, cloning, and
 transferring native Codex conversations, plus native Claude Code transfers.
