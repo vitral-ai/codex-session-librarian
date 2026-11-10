@@ -65,12 +65,19 @@ retroactively to earlier experiments.
 | F3-T06 bindings/privacy/failures | edited plans/results, stale config/producer/generation, lease, CLI and age failures | No private fields accepted; no remote mutation on stale input; no permission/auth repair. Mock subprocess/state negatives are distinct from real crypto tests. |
 | F3-T07 evidence by profile | new-object verification and existing per-member receipts; no event created by apply | No inherited restored/native_passed; hashes/epochs remain separately bound. |
 
-Focal candidate:115 backup tests, including23 new F3 cases versus F2's92. Existing
+Focal candidate:116 backup tests, including24 new F3 cases versus F2's92. Existing
 secret, capture ownership, ZIP preflight, metadata-only quarantine, partial/missing
 coverage, exact logical heads and F2 resume fencing remain included. A stricter
 epoch-map config validation initially exposed a second-rotation candidate carrying
 the prior active map; the transient proposal now excludes that map until apply
 constructs its new active entry. The negative/fix is covered by repeated rotation.
+Intermediate6002a5c passed384 full tests/0skips/0fails in159.480s and its fixed-SHA
+real-age probe passed. Before handoff, source review found that generic private
+state `save()` would chmod an explicitly selected external `--out` parent. A
+synthetic reproduction of that commit confirmed0755→0700; no real user directory
+was affected. External output now uses exclusive publication without changing the
+parent, with mode/sentinel/symlink regression. The intermediate logs/results and
+`development-findings.json` are preserved; the final candidate is frozen again.
 
 The real-age laboratory makes **zero GitHub calls and creates zero remote assets**.
 F2's last observed accumulated inventory20releases/44assets/189632bytes is retained

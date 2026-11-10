@@ -306,3 +306,18 @@ class KeyRotationTests(unittest.TestCase):
         self.control.state['sets'][self.config['set_id']]['epoch']=True
         with patch.object(self.control,'change',side_effect=AssertionError('malformed baseline wrote control')):
             with self.assertRaises(TransferError): self.plan()
+
+    def test_explicit_plan_output_preserves_parent_mode_and_existing_or_aliased_files(self):
+        self.run_backup()
+        folder=self.root/'user-output'; folder.mkdir(); folder.chmod(0o755)
+        target=folder/'public-rotation-plan.json'
+        planned=plan_rotation(self.a,self.config,self.recipients,output=target)
+        self.assertEqual(folder.stat().st_mode & 0o777,0o755)
+        self.assertEqual(target.stat().st_mode & 0o777,0o600)
+        before=target.read_bytes(); alias=folder/'alias.json'; alias.symlink_to(target)
+        for path in (target,alias):
+            with self.assertRaises(TransferError): plan_rotation(self.a,self.config,self.recipients,output=path)
+            self.assertEqual(folder.stat().st_mode & 0o777,0o755)
+            self.assertEqual(target.read_bytes(),before)
+        self.assertTrue(alias.is_symlink())
+        self.assertEqual(json_read(planned['plan'])['new_recipients'],self.recipients)

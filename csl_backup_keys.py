@@ -6,7 +6,7 @@ import tempfile
 import uuid
 
 import csl_backup_format as fmt
-from csl_backup_core import (BackupBusy, BackupStale, MAX_MANIFEST, NAMESPACE, canonical, hash_bytes,
+from csl_backup_core import (BackupBusy, BackupStale, MAX_MANIFEST, NAMESPACE, canonical, exclusive_output, hash_bytes,
                              json_read, locked, now, save, uid)
 from csl_backup_crypto import Age, BackupPolicyError
 from csl_transfer import TransferError
@@ -172,7 +172,13 @@ def plan_rotation(backup, config, recipients, *, key_reference=None, output=None
                        'repo_id': config['repo_id'], 'set_id': config['set_id'], 'source_id': config['source_id']}
         save(backup.root / 'key-plans' / (plan_id + '.reservation.json'), reservation, exclusive=True)
         target = Path(output) if output is not None else backup.root / 'key-plans' / (plan_id + '.plan.json')
-        save(target, value, exclusive=True)
+        if output is None:
+            save(target, value, exclusive=True)
+        else:
+            # An explicitly selected output file does not authorize chmod of
+            # the user's existing parent directory. Publish only our own file.
+            with exclusive_output(target) as staging:
+                staging.write_bytes(canonical(value) + b'\n')
         return {'status': 'planned', 'plan_id': plan_id, 'plan': str(target), 'scope': value['scope'],
                 'affected_sources': value['affected_sources'], 'current_epoch': value['current_epoch'],
                 'new_epoch': value['new_epoch'], 'remote_writes': 0,
