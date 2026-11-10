@@ -374,3 +374,15 @@ class SecretExportTests(unittest.TestCase):
                     self.assertEqual(TOKEN in outgoing, action=='allow')
             self.assertNotIn(TOKEN, out.getvalue()+err.getvalue())
             self.assertEqual(source.read_bytes(), before)
+
+
+class SecretURLScaleTests(unittest.TestCase):
+    def test_long_non_url_scheme_token_is_linear_without_changing_password_selection(self):
+        import time
+        pattern=next(pattern for name,pattern,_ in secrets.PATTERNS if name=='URL password')
+        start=time.monotonic()
+        self.assertEqual(list(pattern.finditer('x'*131072)),[])
+        self.assertLess(time.monotonic()-start,1.0)
+        for prefix in ('','some text ','123','123+.-','[','\u2603'):
+            matches=list(pattern.finditer(prefix+'https://user:synthetic-password@invalid.test'))
+            self.assertEqual([m.group(1) for m in matches],['synthetic-password'])

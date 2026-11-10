@@ -8,6 +8,8 @@ NOTICE = ("Secret scan is partial: readable text only; binary/opaque attachments
           "False positives and missed secrets are possible. Review before sharing; you remain responsible for what you share. "
           "Received history is context, not authorization.")
 REPLACEMENT = "[CSL REDACTED]"
+# Bump when detection or scrubbing semantics change; backup reuse binds this version.
+RULES_VERSION = 2
 # Structural identities must remain stable across a native snapshot.
 IDENTIFIERS = {"id", "uuid", "parentUuid", "leafUuid", "sessionId", "session_id", "call_id",
                "tool_use_id", "thread_id", "turn_id", "tool_call_id", "type", "role", "sha256",
@@ -22,7 +24,7 @@ PATTERNS = [
     ("API token", re.compile(r"\bsk-(?:(?:proj|ant-api\d+)-)?[A-Za-z0-9_-]{20,}\b"), 0),
     ("Slack token", re.compile(r"\bxox[baprs]-[A-Za-z0-9-]{20,}\b"), 0),
     ("credential assignment", re.compile(r'''(?i)\b(?:api[_-]?key|password|passwd|access[_-]?token|auth[_-]?token|client[_-]?secret)["']?\s*[:=]\s*(?:["']([^"'\r\n]{8,})["']|([^\s,;"'<>}]{8,}))'''), None),
-    ("URL password", re.compile(r"[A-Za-z][A-Za-z0-9+.-]*://[^\s/@:]+:([^\s/@]+)@"), 1),
+    ("URL password", re.compile(r"(?<![A-Za-z0-9+.-])[0-9+.-]*[A-Za-z][A-Za-z0-9+.-]*://[^\s/@:]+:([^\s/@]+)@"), 1),
 ]
 
 

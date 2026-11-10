@@ -2,7 +2,39 @@
 
 ## Unreleased
 
-No changes after v0.1.1 yet.
+No changes recorded after the v0.2.0 candidate. Publication is established by its
+GitHub Release/tag and exact selected SHA, not this file alone.
+
+## 0.2.0 — 2026-11-10
+
+Normal release preparation; the **backup feature is experimental**. F0–F3 are
+included; F4 scheduling, F5 retention/GC and new human recovery pilots are not.
+Existing v0.1.0/v0.1.1 tags, notes and participant versions remain unchanged.
+
+- Add Linux/Codex manual encrypted backups with exact native and explicit portable
+  profiles, bounded immutable age containers and encrypted detailed catalogs.
+  Archives are included; agent forks are opt-in. Metadata-only native states are
+  preserved/quarantined without invented messages. Local secret policy defaults
+  to stop; retain requires explicit acceptance and scrub requires portable.
+- Add conversation/version-key incrementals with explicit logical heads, separate
+  complete/partial pointers, honest stale/missing-local coverage and verification
+  debt. No deletion propagation, mtime-only reuse or automatic repacking.
+- Add durable encrypted plans, stable uncertain-write adoption, distributed resume,
+  multiple source identities and fenced execution generations. Restore verifies
+  selected bytes before installation and retains per-member receipts/conflicts.
+- Add reviewed future-only public-recipient rotation, private local epoch maps,
+  plan/config/producer/generation binding and crash reconciliation. Old checkpoints
+  retain their key dependencies; no historical re-encryption or revocation claim.
+- Harden exclusive capture/age/download destinations and ZIP preflight/streaming;
+  bound URL-password scanning on long non-URL tokens (detector rules2).
+- Require externally installed optional pinned age1.3.2 and explicit operational/
+  external recovery recipients. Synthetic manual stdin/FD recovery is tested;
+  positive keyring/headless operation remains unvalidated. No timer is installed.
+
+Phase evidence and release fixed-SHA validation are documented in `docs/BACKUP.md`,
+F0–F3 technical reports and `RELEASE.md`. Synthetic/local mocks, real-age tests and
+bounded live backend evidence have distinct scopes; none establishes universal
+native/model continuity, WORM availability or production custody.
 
 ## 0.1.1 — 2026-11-09
 

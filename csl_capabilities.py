@@ -18,6 +18,7 @@ def coverage():
     commands["convert"] = {"codex": "experimental", "claude": "experimental"}
     commands["verify-live"] = {"codex": "experimental", "claude": "experimental"}
     commands["migrate"] = {"codex": "experimental", "claude": "not-integrated"}
+    commands["backup"] = {"codex": "experimental", "claude": "not-integrated"}
     for name in ("native-cut", "native-clone", "native-sanitize"):
         commands[name]["codex"] = "experimental"
     return {"schema_version": 1, "providers": ["codex", "claude"], "commands": commands,
@@ -34,6 +35,16 @@ def coverage():
             "native_picker_index": {"provider": "codex", "manual": "index --native",
                 "automatic": "best-effort after import/receive; once per migration attempt with completed imports",
                 "method": "native thread/list scan-and-repair; no inference or direct native SQLite edits"},
+            "backup": {"provider": "codex", "status": "experimental-development",
+                "manual_full_checkpoints": True, "incremental_reuse": True, "durable_resume": True,
+                "multiple_sources": True, "partial_checkpoints": True, "catalog_reader_schemas": [1, 2],
+                "catalog_writer_schema": 2, "evidence_policy": "light-each-run-full-30d-v1",
+                "future_recipient_rotation": "explicit source-scoped keys plan/apply; public epoch map",
+                "historical_reencryption": False, "native_sanitized_profile": False,
+                "scheduling": False, "pruning": False,
+                "profiles": ["native-age-v1", "portable-age-v1"], "encryption": "age-v1-x25519; objects and detailed catalogs",
+                "custody": "explicit manual stdin or system-keyring reference; external recovery identity required",
+                "scope": "history only; not projects/auth, model continuity or a durability SLA"},
             "native_clone_visibility": {"provider": "codex", "default": "interactive",
                                         "agent": "persistent-exec-source-excluded-from-default-resume-picker",
                                         "archived": "new-clone-in-archived_sessions",
