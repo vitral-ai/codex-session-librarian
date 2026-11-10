@@ -2,6 +2,32 @@
 
 ## Version records
 
+### v0.2.0 — authorized release candidate
+
+Luis authorized publication on2026-11-10. The owner selects and publishes the exact
+reviewed commit after checks; this record is preparation until the
+[v0.2.0 Release](https://github.com/vitral-ai/codex-session-librarian/releases/tag/v0.2.0)
+exists. It is a normal version release with an explicitly experimental backup
+feature. Existing v0.1.0/v0.1.1 tags and notes must not be changed.
+
+Scope: existing library/transfer commands plus backup F0–F3: manual Linux/Codex
+native/portable encrypted checkpoints, bounded containers, logical-head
+incrementals, partial coverage, durable resume, fencing and future recipient
+rotation. External pinned age1.3.2 is optional for core CSL and required for backup;
+CSL does not install it. Manual stdin/memory/FD external-key recovery has synthetic
+and bounded backend evidence. A system-keyring reference fails closed if unavailable;
+positive keyring/headless operation is not validated. F4 timers, F5 retention/GC,
+historical re-encryption, native-sanitized and new human pilots are not included.
+
+Release validation must name its own fixed SHA: full media/native/migration opt-in
+suite, isolated-prefix installation/version/capabilities/help and offline synthetic
+demo. Earlier phase results remain attached to their own commits. The release
+owner records final SHA, CI, publication date and clean tag-install result in the
+GitHub Release; local preparation alone is not proof that a tag is published.
+No private evidence directories, credentials, keys or real histories are assets.
+
+### Earlier published versions
+
 [v0.1.1](https://github.com/vitral-ai/codex-session-librarian/releases/tag/v0.1.1)
 includes the historical-tool display, secret-review and recall corrections from
 main. Exact publication SHA, date and CI are recorded in that GitHub Release.

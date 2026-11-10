@@ -9,13 +9,15 @@ the actual JSONL history, not just a summary. See the maintained
 
 ## Install
 
-**Release v0.1.1:** after confirming the [published tag](https://github.com/vitral-ai/codex-session-librarian/releases/tag/v0.1.1),
-install the fixed version below. It includes historical tool display and readable
-tool-result retrieval; the full runtime validation record contains 268 tests.
-Exact publication SHA, date and checks are recorded in GitHub Releases.
+**Version v0.2.0:** use the fixed tag after confirming its
+[GitHub Release](https://github.com/vitral-ai/codex-session-librarian/releases/tag/v0.2.0).
+It adds **experimental manual Linux/Codex encrypted backup**, incrementals,
+recovery and future recipient rotation. Existing transfer/library commands remain
+available. Exact publication SHA and validation belong to the Release record;
+a prepared version string does not establish publication.
 
 ```bash
-git clone --branch v0.1.1 https://github.com/vitral-ai/codex-session-librarian.git
+git clone --branch v0.2.0 https://github.com/vitral-ai/codex-session-librarian.git
 cd codex-session-librarian
 ./install.sh
 ```
@@ -32,16 +34,27 @@ string alone does not identify a development checkout's commit.
 
 ### Development versus the published release
 
-Version v0.1.1 includes the issue #7 historical-tool display correction, its
-secret-review coverage and readable tool-result indexing/default recall.
-v0.1.0 remains unchanged at `edd05bb20eb145dea6178d548f1363b9516102af`, with its
-253-test record. The historical 260-test run belongs to PR #9's earlier head;
-the combined v0.1.1 runtime has 268 tests. See [CHANGELOG](CHANGELOG.md) and
-[compatibility evidence](docs/COMPATIBILITY_MAINTENANCE.md).
+Version v0.2.0 includes backup F0–F3: bounded encrypted containers,
+manual native/portable checkpoints, explicit logical-head incrementals, durable
+resume, partial coverage, source fencing and reviewed future recipient rotation.
+Backup remains **experimental, Linux/Codex only**, separate from share/migrate.
+It requires an externally installed pinned **age1.3.2**, an existing private
+GitHub repository and explicit operational/external public recipients. Private
+identities travel through manual stdin/memory/FD or a system-keyring reference.
+Manual recovery is tested; **positive keyring/headless operation is not validated**.
+There are no backup timers, automatic retention/GC or historical re-encryption;
+F4/F5 and new human recovery pilots are not included. Start with the
+[backup manual](docs/BACKUP.md) and synthetic fixtures.
 
-The existing human pilot remains fixed to v0.1.0 and its original data. Do not
-silently switch participants to v0.1.1 or main. Future main changes after a tag
-are development until separately released.
+[v0.1.1](https://github.com/vitral-ai/codex-session-librarian/releases/tag/v0.1.1)
+remains the earlier historical-tool display/secret-review/recall release, with its
+268-test runtime record. v0.1.0 remains unchanged at
+`edd05bb20eb145dea6178d548f1363b9516102af`, with its253-test record. Historical
+tags, notes and participant data are preserved. The existing human pilot remains
+fixed to v0.1.0 unless its study version is explicitly changed; do not silently
+switch participants to v0.2.0 or main. See [CHANGELOG](CHANGELOG.md),
+[release records](RELEASE.md) and [compatibility evidence](docs/COMPATIBILITY_MAINTENANCE.md).
+Future main commits after a tag are development until separately released.
 
 To follow development in a separate checkout:
 
@@ -394,7 +407,7 @@ against localhost, which stops before generation and uses no real API key.
 
 ## Documentation
 
-- [Experimental encrypted backup development manual](docs/BACKUP.md) — F1/F2 checkpoints, incremental heads and resume; F3 future recipient rotation; no timer or retention yet.
+- [Experimental encrypted backup manual](docs/BACKUP.md) — F1/F2 checkpoints, incremental heads and resume; F3 future recipient rotation; no timer or retention yet.
 - [CLI/provider command and content coverage](docs/PROVIDER_MATRIX.md)
 - [Canonical conversion and continuity checks](docs/CONVERSION.md)
 - [Team installation and contributions](docs/TEAM_INSTALL.md)

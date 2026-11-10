@@ -1,12 +1,14 @@
-# Encrypted backup: development manual
+# Experimental encrypted backup
 
-Experimental Linux/Codex functionality in this development branch, not included
-in published v0.1.1. F1 provides manual encrypted capture/restore; F2 adds
+Experimental Linux/Codex functionality prepared for v0.2.0; it was not included
+in v0.1.1. Confirm the exact published tag/SHA in GitHub Releases. F1 provides
+manual encrypted capture/restore; F2 adds
 conversation-level incrementals, explicit resume, partial coverage and multiple
 origins. F3 adds reviewed future recipient rotation; scheduling and retention
 remain later cuts. Historical re-encryption and native-sanitized profiles are not
 selected in this scope.
-No real-data activation or new software release is authorized by this document.
+Installing CSL does not activate backups, timers or personal data collection.
+The release is normal; this backup feature remains explicitly experimental.
 
 ## Scope and custody
 
@@ -28,9 +30,10 @@ to a system keyring (`keyring:UUID`, `secret-tool lookup service csl-backup key_
 CSL does not populate that keyring, generate keys, write private identities into
 config/files/argv/env, or fall back to a plaintext key when lookup fails. A
 headless/scheduled setup must prove keyring availability separately; passing
-manual-stdin tests does not establish unattended custody.
+manual-stdin tests does not establish unattended custody. Positive system-keyring/
+headless operation has not been validated; F4 scheduling is not included.
 
-## Proposed operator flow on this branch
+## Manual operator flow
 
 Public keys below are placeholders. Do not put a private key on the command line.
 
@@ -152,7 +155,7 @@ check. Historical captured/verified/restored times must not be rejuvenated by re
 Normal ciphertext containers are at most64MiB including packaging/age overhead.
 A dedicated `oversized_single` container can preserve one member up to the256MiB
 final ciphertext limit. Beyond that, error explicitly; no splitting/truncation.
-Proposed budgets include10000 sessions,16MiB catalog,2GiB/run and1h/run, not SLA.
+Product budgets include10000 sessions,16MiB catalog,2GiB/run and1h/run, not SLA.
 Small restores can download much more than one session; retaining one member keeps
 its entire container. No automatic repack or remote deletion is implemented here.
 
