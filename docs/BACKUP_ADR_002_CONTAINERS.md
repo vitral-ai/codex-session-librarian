@@ -114,7 +114,11 @@ A new resume execution acquires a new fencing generation, including for the same
 run ID. Checking only owner=run ID would allow a paused previous process to wake
 and write. Artifact reservation epoch stays immutable; a fenced pointer records
 both that artifact epoch and the new commit generation. Compare base complete CP
-and expected prior epoch before takeover; stale renewals/commits fail.
+and current CAS epoch before takeover; stale renewals/commits fail. A second
+base-source checkpoint binding protects newer partials of the same source while
+allowing another source to progress. Decrypted plans must match every reserved
+intention ID, both bases and artifact epoch before acquiring/writing; a valid
+envelope alone cannot substitute another checkpoint.
 
 Incremental reuse carries old integral timestamps and records new lightweight
 availability separately. Full verification due after30days is visible and deferred

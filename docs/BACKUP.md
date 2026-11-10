@@ -192,11 +192,14 @@ source files cannot silently change it. With local journal loss, remote control
 identifies the encrypted draft plan. Already uploaded objects can be adopted; bytes
 that were never uploaded and are no longer local cannot be invented. They become
 explicit failures/partial coverage or a failed run. Resume requires the exact source
-and producer fingerprint; it does not recover/adopt a lost source configuration.
+and producer fingerprint; reserved repo/set/source/run/checkpoint IDs, both base
+checkpoint bindings and artifact epoch must exactly match the durable intention
+before any acquisition/write. Resume rechecks reused remote references without
+changing the old source observation dates. It does not recover/adopt a lost source configuration.
 Do not delete local staging intentionally outside disposable test fixtures.
 
 Every explicit resume acquires a **new epoch**, CAS-checking the current set
-generation and the unchanged base complete checkpoint for its source. Another
+generation and the unchanged base complete checkpoint AND latest complete/partial source checkpoint. Another
 source may have completed in between; that does not supersede this source. An
 active different owner or a retired/misbound intention blocks resume. It fences a paused original execution of the same run,
 as well as other sources. Artifacts retain their reservation `lease_epoch`;

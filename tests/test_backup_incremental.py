@@ -377,3 +377,68 @@ class IncrementalTests(unittest.TestCase):
         self.assertEqual(fmt.catalog(old)['schema_version'],1)
         self.assertEqual(len(fmt.heads(old)),2)
         self.assertEqual(len(fmt.selected(old,old['containers'][0])),2)
+
+    def test_recovered_plan_reserved_ids_and_bases_cannot_drift_even_with_valid_envelope(self):
+        run_id=self.pending_run()
+        item=self.control.state['sets'][self.config['set_id']]
+        binding=copy.deepcopy(item['runs'][run_id]); original_epoch=item['epoch']
+        release=self.store.resolve_release(binding['checkpoint_id'],'c')
+        asset=next(a for a in release['assets'] if a['name']=='plan.age')
+        original=self.store.bytes_by_id[asset['id']]
+        plan=json.loads(original.removeprefix(b'SYNTHETIC-NOT-CRYPTO\n'))
+        shutil.rmtree(self.a.root/'runs'/run_id)
+        for field,value in (('checkpoint_id',str(uuid.uuid4())),('base_checkpoint',str(uuid.uuid4())),
+                            ('base_source_checkpoint',str(uuid.uuid4())),('artifact_epoch',plan['artifact_epoch']+1)):
+            changed=copy.deepcopy(plan); changed[field]=value
+            payload=b'SYNTHETIC-NOT-CRYPTO\n'+json.dumps(changed).encode()
+            self.store.bytes_by_id[asset['id']]=payload; asset['size']=len(payload)
+            with self.subTest(field=field), \
+                 patch.object(self.store,'publish',side_effect=AssertionError('unexpected asset POST')), \
+                 patch.object(self.control,'change',side_effect=AssertionError('unexpected control mutation')):
+                with self.assertRaisesRegex(TransferError,'intention binding'):
+                    self.a.run(self.config,b'synthetic identity',resume=run_id)
+            self.assertEqual(item['epoch'],original_epoch)
+        self.store.bytes_by_id[asset['id']]=original; asset['size']=len(original)
+
+    def test_local_plan_checkpoint_drift_is_rejected_before_acquire(self):
+        run_id=self.pending_run(); plan_path=self.a.root/'runs'/run_id/'plan.json'
+        plan=json_read(plan_path); plan['checkpoint_id']=str(uuid.uuid4()); plan_path.write_text(json.dumps(plan))
+        with patch.object(self.control,'change',side_effect=AssertionError('unexpected control mutation')):
+            with self.assertRaisesRegex(TransferError,'intention binding'):
+                self.a.run(self.config,b'synthetic identity',resume=run_id)
+
+    def test_new_partial_of_same_source_fences_old_pending_run_without_complete_change(self):
+        complete=self.run_backup(); self.change()
+        real=self.store.publish
+        def crash(identifier,ciphertext,kind,**kwargs):
+            if kind=='o': raise RuntimeError('old run interrupted')
+            return real(identifier,ciphertext,kind,**kwargs)
+        with patch.object(self.store,'publish',side_effect=crash):
+            with self.assertRaises(RuntimeError): self.run_backup()
+        item=self.control.state['sets'][self.config['set_id']]; old_run=item['owner']
+        self.control.clock+=1000
+        self.sources[0][0].write_bytes(self.sources[0][1]+b'BROKEN\n')
+        partial=self.run_backup()
+        source=item['sources'][self.config['source_id']]
+        # FakeControl changes state via copy; re-read actual committed state.
+        source=self.control.state['sets'][self.config['set_id']]['sources'][self.config['source_id']]
+        self.assertEqual(partial['status'],'partial')
+        self.assertEqual(source['latest_complete'],complete['checkpoint_id'])
+        self.assertEqual(source['latest_partial'],partial['checkpoint_id'])
+        with self.assertRaisesRegex(BackupBusy,'Source checkpoint changed'):
+            self.a.run(self.config,b'synthetic identity',resume=old_run)
+        self.assertEqual(self.a.latest()[2]['latest_partial'],partial['checkpoint_id'])
+
+    def test_resume_rechecks_reused_reference_instead_of_committing_old_availability(self):
+        complete=self.run_backup(); catalog=self.catalog(complete['checkpoint_id'])
+        real=self.store.publish
+        def crash(identifier,ciphertext,kind,**kwargs):
+            if kind=='c': raise RuntimeError('before catalog')
+            return real(identifier,ciphertext,kind,**kwargs)
+        with patch.object(self.store,'publish',side_effect=crash):
+            with self.assertRaises(RuntimeError): self.run_backup()
+        run_id=self.control.state['sets'][self.config['set_id']]['owner']
+        del self.store.releases_by_tag['cslb-v1-o-'+catalog['containers'][0]['container_id']]
+        with self.assertRaisesRegex(TransferError,'No protected'):
+            self.a.run(self.config,b'synthetic identity',resume=run_id)
+        self.assertEqual(self.a.latest()[2]['latest_complete'],complete['checkpoint_id'])

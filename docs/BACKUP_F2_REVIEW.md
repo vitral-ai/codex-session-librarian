@@ -33,7 +33,12 @@ Each explicit resume takes a new fencing generation, including when the previous
 process of that same run is paused. Artifact reservation epoch and pointer commit
 epoch are separate. Another source completing within the same set does not retire
 a pending source whose own baseCP remains unchanged; active other writers,
-retired/misbound intentions or superseded baseCP block takeover.
+retired/misbound intentions or superseded complete/latest-source CP block takeover.
+An intervening partial of the same source also fences old runs. Plan recovery
+compares reserved repo/set/source/run/checkpoint IDs, both base pointers and artifact
+epoch against local/remote intention before acquisition/write, even with a valid
+ciphertext/envelope. Resume rechecks reused references instead of committing an old
+availability claim.
 
 Capture budgets precede further copying; coherent excluded-agent headers avoid a
 full copy. ZIP verification/extraction streams members. A measured quadratic
@@ -48,7 +53,12 @@ Private evidence: `.local/backup-evidence/f2/`; no keys or real histories in Git
 The live trial ran on prefreeze dirty modules with detector rules1. Later guards,
 status summaries, multisource takeover refinement and detector rules2 have local
 regressions; do not attribute the live execution to a SHA created afterwards.
-A fixed final-code full suite and source/artifact seal are recorded separately.
+Intermediate code8575093 passed357 tests without skips/failures in139.6s,
+with source hashes unchanged. Owner review then found a missing reserved-plan ID
+comparison; it was reproduced and fixed before the next freeze. Additional local
+regressions cover checkpoint/base/epoch drift with0POST/control mutations, a newer
+same-source partial and unavailable reused references at resume. A fixed final-code
+full suite and source/artifact seal are recorded separately.
 
 | Requirement | Evidence | Result/scope |
 | --- | --- | --- |
@@ -63,7 +73,7 @@ A fixed final-code full suite and source/artifact seal are recorded separately.
 | F2-T09 restore receipts | inherited F1 plus P1/P2 old/new restoration | Exact head selection and cross-checkpoint UUID reuse/conflict; sources intact. |
 | F2-T10 memory/I/O/costs | `scale-32mib-02.json`, live costs/ledger | Measured local warm-cache probe and bounded real API use; no multi-GB remote benchmark. |
 
-Focal candidate:88 backup tests plus19 secret tests, including29 new backup and
+Focal candidate:92 backup tests plus19 secret tests, including33 new backup and
 one new detector regression versus F1. Prefreeze full suite:353 tests, no skips
 or failures,156.790s (`regressions-01`). Final fixed-SHA full suite remains the
 candidate's decisive regression record; this prefreeze count is not substituted.

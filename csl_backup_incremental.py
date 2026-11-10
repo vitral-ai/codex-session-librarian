@@ -48,7 +48,7 @@ def _previous(backup, config, identity, directory):
     base = source.get('latest_complete')
     identifier = source.get('latest_checkpoint') or base
     if not identifier:
-        return base, None
+        return base, None, None
     previous_dir = directory / 'previous'
     previous_dir.mkdir()
     previous, _ = backup._read_checkpoint(identifier, identity, previous_dir,
@@ -57,12 +57,12 @@ def _previous(backup, config, identity, directory):
     # remain independently addressable and are never relabelled with new rules.
     if previous['fingerprint'] != fmt.fingerprint(config):
         previous = None
-    return base, previous
+    return base, previous, identifier
 
 
 def _plan(backup, config, identity, directory, run_id, checkpoint_id):
     stamp = now()
-    base, previous = _previous(backup, config, identity, directory)
+    base, previous, source_base = _previous(backup, config, identity, directory)
     entries, exclusions, failures = backup._entries(config, directory)
     old = {}
     if previous:
@@ -126,7 +126,8 @@ def _plan(backup, config, identity, directory, run_id, checkpoint_id):
         raise TransferError('Final ciphertext/run budget exceeded before remote mutation')
     return {'format': 'csl-backup-plan', 'schema_version': 1, 'repo_id': config['repo_id'],
             'set_id': config['set_id'], 'source_id': config['source_id'], 'fingerprint': fmt.fingerprint(config),
-            'run_id': run_id, 'checkpoint_id': checkpoint_id, 'base_checkpoint': base, 'cut_at': stamp,
+            'run_id': run_id, 'checkpoint_id': checkpoint_id, 'base_checkpoint': base,
+            'base_source_checkpoint': source_base, 'cut_at': stamp,
             'selection': {'provider': 'codex', 'archives': True, 'agent_forks': config['agent_forks']},
             'exclusions': exclusions, 'failures': failures, 'eligible': len(entries) + len(failures),
             'captured_source_bytes': backup._last_capture_bytes,
@@ -154,6 +155,20 @@ def _bind(plan, config, run_id):
             raise TransferError('Resume container/run binding differs')
 
 
+
+def _bind_intent(plan, binding, config, run_id):
+    """Valid encryption is not enough: reserved IDs must remain unchanged."""
+    _bind(plan, config, run_id)
+    fields = ('repo_id', 'set_id', 'source_id', 'run_id', 'checkpoint_id',
+              'base_checkpoint', 'base_source_checkpoint', 'artifact_epoch')
+    if not isinstance(binding, dict) or any(k not in plan or k not in binding or plan[k] != binding[k] for k in fields):
+        raise TransferError('Resume plan differs from reserved intention binding')
+    fmt.integer(binding.get('lease_epoch'), 1)
+    fmt.integer(binding.get('artifact_epoch'), 1)
+    for key in ('base_checkpoint', 'base_source_checkpoint'):
+        if plan[key] is not None:
+            uid(plan[key])
+
 def _download_plan(backup, config, identity, run_id, directory):
     _, state = backup.control.read()
     item = state['sets'].get(config['set_id'], {})
@@ -172,11 +187,14 @@ def _download_plan(backup, config, identity, run_id, directory):
         raise TransferError('Remote plan envelope differs')
     backup.age.decrypt(encrypted, plain, identity)
     plan = json_read(plain)
-    _bind(plan, config, run_id)
+    _bind_intent(plan, binding, config, run_id)
     return plan, binding
 
 
 def run(backup, config, identity, *, dry_run=False, resume=None):
+    fmt.config(config)
+    if config['repo_id'] != backup.github.repo_id:
+        raise TransferError('Configured backup repository identity differs')
     if dry_run and resume:
         raise TransferError('Resume and dry-run cannot be combined')
     if not backup.github.metadata.get('permissions', {}).get('push'):
@@ -197,7 +215,7 @@ def run(backup, config, identity, *, dry_run=False, resume=None):
                     plan = json_read(directory / 'plan.json')
                 else:
                     plan, binding = _download_plan(backup, config, identity, run_id, temporary)
-                _bind(plan, config, run_id)
+                _bind_intent(plan, binding, config, run_id)
                 _, state = backup.control.read()
                 item = state['sets'][config['set_id']]
                 source = item['sources'][config['source_id']]
@@ -206,6 +224,7 @@ def run(backup, config, identity, *, dry_run=False, resume=None):
                             'cut_at': plan['cut_at'], 'fresh_capture': False}
                 remote_binding = item.get('runs', {}).get(run_id)
                 if remote_binding is not None:
+                    _bind_intent(plan, remote_binding, config, run_id)
                     binding = remote_binding
                 epoch = binding['lease_epoch']
                 # Every explicit resume takes a NEW generation, even while
@@ -213,7 +232,7 @@ def run(backup, config, identity, *, dry_run=False, resume=None):
                 # Its old token can never renew or commit after this acquire.
                 artifact_epoch = binding.get('artifact_epoch', epoch)
                 epoch = backup._lease(config, run_id, acquire=True, expected_epoch=item['epoch'],
-                                      base_checkpoint=plan['base_checkpoint'])
+                                      base_checkpoint=plan['base_checkpoint'], source_base=plan['base_source_checkpoint'])
                 binding = {**binding, 'lease_epoch': epoch, 'artifact_epoch': artifact_epoch}
             else:
                 checkpoint_id = str(uuid.uuid4())
@@ -224,9 +243,11 @@ def run(backup, config, identity, *, dry_run=False, resume=None):
                             'ciphertext_bytes': sum(p.stat().st_size for p, _ in packed), 'failures': plan['failures']}
                 if not plan['heads'] and not plan['pending']:
                     raise TransferError('No protected conversations; run failed without publishing a checkpoint')
-                epoch = backup._lease(config, run_id, acquire=True, base_checkpoint=plan['base_checkpoint'])
-                binding = {'checkpoint_id': checkpoint_id, 'source_id': config['source_id'],
-                           'base_checkpoint': plan['base_checkpoint'], 'lease_epoch': epoch, 'artifact_epoch': epoch}
+                epoch = backup._lease(config, run_id, acquire=True, base_checkpoint=plan['base_checkpoint'], source_base=plan['base_source_checkpoint'])
+                plan['artifact_epoch'] = epoch
+                binding = {k: plan[k] for k in ('repo_id', 'set_id', 'source_id', 'run_id', 'checkpoint_id',
+                           'base_checkpoint', 'base_source_checkpoint', 'artifact_epoch')}
+                binding['lease_epoch'] = epoch
                 save(journal, binding, exclusive=True)
                 for path, manifest in packed:
                     destination = directory / (manifest['container_id'] + '.age')
@@ -234,8 +255,8 @@ def run(backup, config, identity, *, dry_run=False, resume=None):
                 save(directory / 'plan.json', plan, exclusive=True)
             # Local intent/ciphertexts are durable before any release POST. The
             # opaque control binding permits recovery when the journal is lost.
-            backup._lease(config, run_id, expected_epoch=epoch, base_checkpoint=plan['base_checkpoint'],
-                          run_binding={k: binding[k] for k in ('checkpoint_id','source_id','base_checkpoint','lease_epoch','artifact_epoch')})
+            backup._lease(config, run_id, expected_epoch=epoch, base_checkpoint=plan['base_checkpoint'], source_base=plan['base_source_checkpoint'],
+                          run_binding={k: binding[k] for k in ('repo_id','set_id','source_id','run_id','checkpoint_id','base_checkpoint','base_source_checkpoint','lease_epoch','artifact_epoch')})
             release = backup.github.reserve(plan['checkpoint_id'])
             encrypted = directory / 'plan.age'
             if not encrypted.exists():
@@ -248,16 +269,34 @@ def run(backup, config, identity, *, dry_run=False, resume=None):
             backup.age.decrypt(checked, plain, identity)
             if json_read(plain) != plan:
                 raise TransferError('Uploaded plan differs from intended cut')
-            _bind(plan, config, run_id)
+            _bind_intent(plan, binding, config, run_id)
             save(journal, {**binding, 'state': 'uploading'})
             containers, heads = copy.deepcopy(plan['containers']), copy.deepcopy(plan['heads'])
             failures = copy.deepcopy(plan['failures'])
+            reused = plan['reused']
+            if resume:
+                current_containers = []
+                for container in containers:
+                    try:
+                        current_containers.append(_check_light(backup, container, now()))
+                    except (TransferError, OSError, KeyError):
+                        removed = [h for h in heads if h['container_id'] == container['container_id']]
+                        by_member = {m['member_id']: m for m in container['manifest']['members']}
+                        reused -= sum(h['state'] == 'current' for h in removed)
+                        failed_ids = {f['source_uuid'] for f in failures}
+                        for head in removed:
+                            sid = by_member[head['member_id']]['origin']['source_uuid']
+                            if sid not in failed_ids:
+                                failures.append({'source_uuid': sid, 'reason_code': 'ResumeReferenceUnavailable'})
+                                failed_ids.add(sid)
+                        heads = [h for h in heads if h['container_id'] != container['container_id']]
+                containers = current_containers
             captured = 0
             uploaded_bytes = downloaded_bytes = 0
             for pending in plan['pending']:
                 manifest = pending['manifest']
                 cid = manifest['container_id']
-                backup._lease(config, run_id, expected_epoch=epoch, base_checkpoint=plan['base_checkpoint'])
+                backup._lease(config, run_id, expected_epoch=epoch, base_checkpoint=plan['base_checkpoint'], source_base=plan['base_source_checkpoint'])
                 if time.monotonic() - started > 3600:
                     failures.extend({'source_uuid': m['origin']['source_uuid'], 'reason_code': 'RunBudgetExceeded'} for m in manifest['members'])
                     continue
@@ -286,7 +325,7 @@ def run(backup, config, identity, *, dry_run=False, resume=None):
                     envelope = backup.github.read_envelope(backup.github.resolve_release(cid, 'o', published['release_id']), cid)
                     if envelope['sha256'] != hash_file(checked) or envelope['bytes'] != checked.stat().st_size:
                         raise TransferError('Container envelope conflicts with verified bytes')
-                    backup._lease(config, run_id, expected_epoch=epoch, base_checkpoint=plan['base_checkpoint'])
+                    backup._lease(config, run_id, expected_epoch=epoch, base_checkpoint=plan['base_checkpoint'], source_base=plan['base_source_checkpoint'])
                     backup.github.finalize(cid, 'o', published['release_id'])
                     container = {'container_id': cid, 'release_id': published['release_id'],
                         'asset_id': published['asset']['id'], 'bytes': checked.stat().st_size, 'sha256': hash_file(checked),
@@ -303,14 +342,19 @@ def run(backup, config, identity, *, dry_run=False, resume=None):
             failed_ids = {f['source_uuid'] for f in failures}
             for fallback in plan.get('fallbacks', []):
                 if fallback['source_uuid'] in failed_ids:
+                    try:
+                        available_fallback = _check_light(backup, fallback['container'], now())
+                    except (TransferError, OSError, KeyError):
+                        continue
                     heads.append(copy.deepcopy(fallback['head']))
                     if not any(c['container_id'] == fallback['container']['container_id'] for c in containers):
-                        containers.append(copy.deepcopy(fallback['container']))
-            if not heads or (captured + plan["reused"] == 0 and failures):
-                save(journal, {**binding, 'state': 'failed'})
-                raise TransferError('No protected conversations; draft is not a restorable checkpoint')
-            counts = {'eligible': plan['reused'] + captured + len(failures), 'captured': captured,
-                      'reused': plan['reused'], 'failed': len(failures),
+                        containers.append(available_fallback)
+            if not heads or (captured + reused == 0 and failures):
+                save(journal, {**binding, 'state': 'failed', 'failures': failures,
+                               'reason_code': 'NoCurrentSuccess', 'protected_heads': len(heads)})
+                raise TransferError('No protected conversations/current successes; draft is not a restorable checkpoint; durable failures retained')
+            counts = {'eligible': reused + captured + len(failures), 'captured': captured,
+                      'reused': reused, 'failed': len(failures),
                       'stale': sum(h['state'] == 'stale' for h in heads),
                       'missing_local': sum(h['state'] == 'missing_local' for h in heads),
                       'protected': len(heads), 'excluded': len(plan['exclusions'])}
@@ -319,14 +363,14 @@ def run(backup, config, identity, *, dry_run=False, resume=None):
             catalog.update(format='csl-backup-catalog', schema_version=2, lease_epoch=binding['artifact_epoch'],
                 status='partial' if failures else 'complete', failures=failures, heads=heads, counts=counts,
                 containers=containers, evidence_policy='light-each-run-full-30d-v1',
-                base_checkpoint=plan['base_checkpoint'], published_at=now())
+                base_checkpoint=plan['base_checkpoint'], base_source_checkpoint=plan['base_source_checkpoint'], published_at=now())
             fmt.catalog(catalog, {**config, 'fingerprint': fmt.fingerprint(config)})
             plain, encrypted = temporary / 'catalog.json', temporary / 'catalog.age'
             save(plain, catalog, exclusive=True)
             if plain.stat().st_size > MAX_MANIFEST:
                 raise TransferError('Checkpoint metadata exceeds budget')
             backup.age.encrypt(plain, encrypted, config['recipients'])
-            backup._lease(config, run_id, expected_epoch=epoch, base_checkpoint=plan['base_checkpoint'])
+            backup._lease(config, run_id, expected_epoch=epoch, base_checkpoint=plan['base_checkpoint'], source_base=plan['base_source_checkpoint'])
             published = backup.github.publish(plan['checkpoint_id'], encrypted, 'c')
             checked, decrypted = temporary / 'catalog.checked.age', temporary / 'catalog.checked.json'
             backup.github.download(published['asset'], checked)
@@ -341,12 +385,12 @@ def run(backup, config, identity, *, dry_run=False, resume=None):
             envelope = backup.github.read_envelope(release, plan['checkpoint_id'])
             if envelope['sha256'] != hash_file(checked) or envelope['bytes'] != checked.stat().st_size:
                 raise TransferError('Catalog envelope differs')
-            backup._lease(config, run_id, expected_epoch=epoch, base_checkpoint=plan['base_checkpoint'])
+            backup._lease(config, run_id, expected_epoch=epoch, base_checkpoint=plan['base_checkpoint'], source_base=plan['base_source_checkpoint'])
             backup.github.finalize(plan['checkpoint_id'], 'c', published['release_id'])
             pointer = {'release_id': published['release_id'], 'asset_id': published['asset']['id'],
                        'bytes': checked.stat().st_size, 'sha256': hash_file(checked), 'lease_epoch': binding['artifact_epoch'], 'commit_epoch': epoch}
             backup._lease(config, run_id, checkpoint=plan['checkpoint_id'], catalog_binding=pointer,
-                partial=bool(failures), expected_epoch=epoch, base_checkpoint=plan['base_checkpoint'])
+                partial=bool(failures), expected_epoch=epoch, base_checkpoint=plan['base_checkpoint'], source_base=plan['base_source_checkpoint'])
             result = {'status': catalog['status'], 'checkpoint_id': plan['checkpoint_id'], 'run_id': run_id,
                     'cut_at': plan['cut_at'], 'fresh_capture': not bool(resume), 'sessions': len(heads),
                     'containers': len(containers), 'repo_id': config['repo_id'], 'counts': counts,

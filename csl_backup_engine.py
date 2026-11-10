@@ -93,7 +93,7 @@ class Backup:
                 "status": "configured; no backup captured or timer enabled"}
 
     def _lease(self, config, run_id, *, checkpoint=None, catalog_binding=None, intents=None,
-               acquire=False, expected_epoch=None, base_checkpoint=None, partial=False, run_binding=None):
+               acquire=False, expected_epoch=None, base_checkpoint=None, source_base=..., partial=False, run_binding=None):
         def mutate(state, clock):
             if config["set_id"] not in state["sets"] and not acquire:
                 raise BackupBusy("Backup lease no longer registered")
@@ -119,6 +119,8 @@ class Backup:
                 raise BackupBusy("Writer lost lease/epoch; cannot reacquire or publish pointer")
             if base_checkpoint != source.get("latest_complete"):
                 raise BackupBusy("Base checkpoint changed; old run cannot publish pointer")
+            if source_base is not ... and source_base != source.get("latest_checkpoint", source.get("latest_complete")):
+                raise BackupBusy("Source checkpoint changed; old run cannot publish pointer")
             item["expires"] = clock + 600
             if intents is not None:
                 item["intents"] = list(intents)
