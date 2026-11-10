@@ -281,3 +281,58 @@ def zip_read(archive, name):
     if len(data) != info.file_size:
         raise TransferError("Container member differs from declared size")
     return data
+
+
+def header_source(source):
+    """Bounded, coherent header classification before copying an excluded source.
+
+    This does not claim capture/integrity evidence for excluded conversations.
+    Unusual headers fall back to full capture and validation.
+    """
+    fd = os.open(source, os.O_RDONLY | os.O_NOFOLLOW)
+    try:
+        before = os.fstat(fd)
+        if not stat.S_ISREG(before.st_mode):
+            raise TransferError("Unsupported native source type")
+        with os.fdopen(os.dup(fd), 'rb') as stream:
+            line = stream.readline(1024**2 + 1)
+        if len(line) > 1024**2:
+            return None
+        try:
+            row = strict_json(line)
+        except (ValueError, UnicodeError):
+            return None
+        after = os.fstat(fd)
+        current = Path(source).stat(follow_symlinks=False)
+        fields = lambda item: (item.st_dev, item.st_ino, item.st_size, item.st_mtime_ns, item.st_ctime_ns)
+        if fields(before) != fields(after) or fields(after) != fields(current):
+            return None
+        if not isinstance(row, dict) or row.get('type') != 'session_meta' or not isinstance(row.get('payload'), dict):
+            return None
+        uid(row['payload'].get('id'))
+        source_kind(row['payload'].get('source', 'cli'))
+        return row['payload']
+    finally:
+        os.close(fd)
+
+
+def zip_digest(archive, entry, target=None):
+    """Preflight must precede this bounded streaming member read."""
+    digest, count = hashlib.sha256(), 0
+    with archive.open(entry['file']) as source:
+        while chunk := source.read(1024**2):
+            count += len(chunk)
+            if count > entry['bytes']:
+                raise TransferError("Member exceeds declared size")
+            digest.update(chunk)
+            if target is not None:
+                target.write(chunk)
+    if count != entry['bytes'] or digest.hexdigest() != entry['sha256']:
+        raise TransferError("Member checksum/size differs")
+    return digest.hexdigest()
+
+
+def zip_extract(archive, entry, destination):
+    with exclusive_output(destination) as staging:
+        with staging.open('xb') as target:
+            zip_digest(archive, entry, target)

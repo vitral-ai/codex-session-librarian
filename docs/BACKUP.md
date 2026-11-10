@@ -1,8 +1,9 @@
 # Encrypted backup: development manual
 
 Experimental Linux/Codex functionality in this development branch, not included
-in published v0.1.1. Manual full checkpoints are implemented in F1; incremental
-reuse, scheduling and retention are later cuts, not implied by these commands.
+in published v0.1.1. F1 provides manual encrypted capture/restore; F2 adds
+conversation-level incrementals, explicit resume, partial coverage and multiple
+origins. Scheduling, key rotation and retention remain later cuts.
 No real-data activation or new software release is authorized by this document.
 
 ## Scope and custody
@@ -49,6 +50,11 @@ csl backup status --set SET_UUID --cached
 age executable. No account switching is performed. Source IDs are random, not
 hostnames. Repeating init with the same local labels/config reuses set/source;
 material changes conflict rather than silently creating a second origin.
+To add a distinct origin to an existing remote set, explicitly initialize with
+`--set SET_UUID` and a new `--source-name`. This allocates a fresh source UUID;
+it never adopts an old source by hostname. Use `--source SOURCE_UUID` when several
+local sources or remote latest pointers would otherwise be ambiguous. Equal
+native UUIDs from different sources are independent versions.
 
 Archives are included. Agent forks are opt-in at init with `--include-agent-forks`.
 Known Codex0.167 structured SubAgent sources are preserved, not converted to cli.
@@ -71,6 +77,15 @@ quarantined. Portable export can reject an empty state it cannot represent.
 - `retain` requires `--accept-retain-risk` at init and always remains encrypted.
 - `scrub` requires explicit portable profile; it modifies only output copies and
   does not promise to sanitize opaque attachments. Native+scrub is rejected.
+
+A failing eligible source produces explicit partial coverage when other eligible
+sources succeed. `latest_partial` is separate from `latest_complete`; `restore
+latest` continues to use the complete pointer. Restoring a partial UUID requires
+`--allow-partial` and reports omissions/stale entries. No current successes means
+a failed run, never a healthy draft. A locally missing conversation retains its
+verified remote head and original observation date as `missing_local`, without
+propagating a deletion. Exclusions, current captured/reused, failed, stale,
+missing-local and protected counts are separate; protected is not eligible success.
 
 No generic unencrypted-backup switch exists. Test plaintext stores are separate
 synthetic harnesses, not an option for personal conversations.
@@ -139,12 +154,78 @@ Proposed budgets include10000 sessions,16MiB catalog,2GiB/run and1h/run, not SLA
 Small restores can download much more than one session; retaining one member keeps
 its entire container. No automatic repack or remote deletion is implemented here.
 
+## Incrementals and durable resume
+
+Catalog schema2 explicitly selects logical heads, each bound to an immutable
+container/member/hash/version. If P1 has A1+B1 and P2 adds A2, the next checkpoint
+selects A2+B1; restore never resurrects A1 merely because P1 remains referenced.
+The reader still accepts schema1 catalogs (all members implicitly selected);
+old readers reject schema2. Physical containers/manifests remain schema1.
+Previous checkpoints and their capture/integrity dates are never edited.
+
+Reuse compares the coherent captured source hash, origin, visibility and complete
+producer fingerprint, never mtime/size alone. Each reused physical container gets
+an existence/asset-ID/size/envelope binding check, reported `available`. This
+preserves its previous integral verification date. `verification_due` becomes true
+after30days under `light-each-run-full-30d-v1`; runs do not automatically download
+the entire backlog. Manual `verify` and every restore read all selected containers
+fully. Later checks create local observer/asset/hash events, not edits to catalogs.
+Status returns local events separately from referenced remote control; a recent
+failed attempt remains visible. No new recurring task is created.
+
+Before release POSTs, private durable local state reserves run/checkpoint/object
+IDs and encrypted object bytes. A draft checkpoint release receives `plan.age`
+and `plan-descriptor.json`; it later receives `catalog.age` and `descriptor.json`.
+That is **four assets per checkpoint**, plus two per new physical container.
+A draft/plan is not a valid backup. New physical objects are downloaded, decrypted
+and checked against the exact intended manifest before becoming published; the
+catalog/envelope is verified before publication and the fenced control commit.
+Uncertain POSTs resolve stable IDs and adopt remotely accepted bytes after full
+logical binding verification, including randomized ciphertext; no overwrite.
+
+```bash
+csl backup run --set SET_UUID --source SOURCE_UUID --resume RUN_UUID
+```
+
+Resume targets the old cut and reports `fresh_capture: false`; changes to current
+source files cannot silently change it. With local journal loss, remote control
+identifies the encrypted draft plan. Already uploaded objects can be adopted; bytes
+that were never uploaded and are no longer local cannot be invented. They become
+explicit failures/partial coverage or a failed run. Resume requires the exact source
+and producer fingerprint; it does not recover/adopt a lost source configuration.
+Do not delete local staging intentionally outside disposable test fixtures.
+
+Every explicit resume acquires a **new epoch**, CAS-checking the current set
+generation and the unchanged base complete checkpoint for its source. Another
+source may have completed in between; that does not supersede this source. An
+active different owner or a retired/misbound intention blocks resume. It fences a paused original execution of the same run,
+as well as other sources. Artifacts retain their reservation `lease_epoch`;
+control `catalog.lease_epoch` binds that immutable catalog and `commit_epoch`
+records the currently authorized generation that committed the pointer. This lets
+a new generation adopt a previously verified catalog without editing it. Ordinary
+renewal requires an unexpired matching owner+epoch; no old writer reacquires itself.
+
+Captures are admitted under the size/count budget before copying further files.
+Coherent bounded native headers classify excluded agents before full capture;
+unusual headers fall back to full validation. Verification/extraction streams member
+bytes, rather than retaining all transcripts in RAM. Actual final ciphertext limits
+still apply, with dedicated oversized single-member containers and no truncation.
+
+Run `costs` reports uploaded/downloaded container bytes and transport call/byte
+counters, including metadata/revalidation/control and plan/catalog/envelope traffic.
+Upload bytes count attempted submissions; download bytes count received bytes.
+Identity-checking wrappers, laboratory inventory checks and CDN redirects add their
+own calls and are recorded separately by the laboratory. These are measurements,
+not a provider quota or sustained throughput promise.
+
 ## Maintenance
 
 Version reuse binds source bytes/state, origin, profile, recipients, secret policy,
 producing CSL version, `csl_backup_format.EXPORTER_VERSION` and
 `csl_secrets.RULES_VERSION`. Bump exporter/rules versions whenever semantics change,
-even before a release; no Git checkout is needed at runtime. New producer versions
+even before a release; no Git checkout is needed at runtime. Detector rules2
+bound URL scheme scanning to token starts, preserving password selection while
+avoiding quadratic retries on long non-URL text. New producer versions
 invalidate reuse, but the reader does NOT require equality with its current CSL
 version to load an older compatible schema/profile. A format change still requires
 an explicit adapter/schema decision, not a version-number bypass.

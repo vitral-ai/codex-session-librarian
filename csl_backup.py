@@ -47,6 +47,10 @@ def command(args, csl):
         config = None
         if args.set:
             path = root / "sets" / (uid(args.set) + ".json")
+            if args.source and (root / "sets" / args.set / (uid(args.source) + ".json")).exists():
+                path = root / "sets" / args.set / (args.source + ".json")
+            elif args.backup_action == "run" and not args.source and any((root / "sets" / args.set).glob("*.json")):
+                raise TransferError("Multiple locally configured sources; select --source explicitly")
             if path.exists():
                 from csl_backup_format import config as check_config
                 config = check_config(json_read(path))
@@ -71,7 +75,7 @@ def command(args, csl):
                 result = backup.initialize(set_name=args.set_name, source_name=args.source_name,
                     profile=args.profile, policy=args.secret_policy, recipients=args.recipient,
                     key_reference=args.key_reference, retain_accepted=args.accept_retain_risk,
-                    include_agents=args.include_agent_forks)
+                    include_agents=args.include_agent_forks, set_id=args.set)
             elif args.backup_action in ("list", "discover", "status"):
                 result = backup.discover(scan=getattr(args, "scan", False))
                 if "sets" in result:
@@ -100,15 +104,17 @@ def command(args, csl):
                 attempt.update(stage="executing")
                 save(root / "attempts" / (attempt["attempt_id"] + ".json"), attempt)
                 if args.backup_action == "run":
-                    result = backup.run(config, identity, dry_run=args.dry_run)
+                    result = backup.run(config, identity, dry_run=args.dry_run, resume=args.resume)
                 elif args.backup_action == "restore":
                     result = backup.restore(args.checkpoint, identity, args.cwd, set_id=args.set, source_id=args.source,
-                                            dry_run=args.dry_run, new=args.new)
+                                            dry_run=args.dry_run, new=args.new, allow_partial=args.allow_partial)
                 else:
                     result = backup.verify(args.checkpoint, identity, set_id=args.set, source_id=args.source, native=args.native)
-                attempt.update(result="passed", finished_at=now())
+                attempt.update(result="partial" if result.get("status") == "partial" else "passed", finished_at=now(), summary=result)
                 save(root / "attempts" / (attempt["attempt_id"] + ".json"), attempt)
         print(json.dumps(result, sort_keys=True, indent=None if args.json else 2))
+        if result.get("status") == "partial":
+            raise SystemExit(2)
         return result
     except (TransferError, OSError, KeyError, TypeError, ValueError) as error:
         if attempt:
@@ -143,11 +149,14 @@ def add_commands(subparsers, csl):
             sub.add_argument("--include-agent-forks", action="store_true")
         if name in ("run", "restore", "verify"):
             sub.add_argument("--identity-stdin", action="store_true", help="Read a private identity from a pipe, never argv/env or saved auth.")
+        if name == "run":
+            sub.add_argument("--resume", help="Resume the exact durable run UUID/cut; never implies a fresh capture.")
         if name in ("run", "restore"):
             sub.add_argument("--dry-run", action="store_true")
         if name in ("restore", "verify"):
             sub.add_argument("checkpoint", help="Checkpoint UUID, or latest within an unambiguous set/source.")
         if name == "restore":
+            sub.add_argument("--allow-partial", action="store_true", help="Explicitly restore a partial checkpoint with omissions/stale coverage.")
             sub.add_argument("--cwd", type=Path, required=True)
             sub.add_argument("--new", action="store_true", help="Explicitly install another copy instead of reusing the verified receipt.")
         if name == "verify":

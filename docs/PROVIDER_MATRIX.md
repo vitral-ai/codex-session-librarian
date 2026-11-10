@@ -67,9 +67,10 @@ archives/non-interactive sources and does not migrate project files or accounts.
 `--confirm-restored`; it never deletes files. See [migration](SHARING.md#computer-migration).
 
 `backup` is experimental Linux/Codex-only development, separate from migration and
-team sharing. F1 provides manual full encrypted checkpoints with native/portable
-profiles and explicit custody/policies. It does not imply incremental reuse,
-scheduling, retention or a published release. See [backup scope](BACKUP.md).
+team sharing. F1/F2 provide encrypted native/portable conversation checkpoints,
+explicit custody/policies, logical-head incremental reuse, partial coverage,
+multiple sources and durable resume. Scheduling, advanced rotation and retention
+remain later cuts; no published release is implied. See [backup scope](BACKUP.md).
 
 Codex portable export/share and migration upload support explicit
 `--repair-legacy-compaction` for the recognized orphaned final summary annotation

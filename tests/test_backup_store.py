@@ -74,3 +74,92 @@ class BackupDestinationRecheckTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class MemoryReleaseAPI(GitHub):
+    """HTTP state machine with accepted-write/lost-response boundaries, no network."""
+    def __init__(self):
+        self.rows=[]; self.contents={}; self.metadata={'default_branch':'main'}
+        self.posts=[]; self.fail_after=set(); self.counter=1
+    def revalidate(self,write=False):
+        return None
+    def releases(self):
+        return iter(self.rows)
+    def download(self,asset,target):
+        from csl_backup_core import exclusive_output
+        with exclusive_output(target) as staging:
+            staging.write_bytes(self.contents[asset['id']])
+    def request(self,method,suffix,body=None,*,upload=None):
+        from csl_backup_store import RemoteError
+        if method=='GET' and suffix.startswith('/git/ref/'):
+            return {'object':{'sha':'synthetic-base'}}
+        if method=='GET' and suffix.startswith('/releases/'):
+            return next(r for r in self.rows if r['id']==int(suffix.split('/')[2]))
+        if method=='POST' and suffix=='/releases':
+            self.posts.append(suffix)
+            self.counter+=1
+            value={'id':self.counter,'assets':[],**body}; self.rows.append(value)
+            key='release'
+        elif method=='POST' and '/assets?name=' in suffix:
+            self.posts.append(suffix)
+            release=next(r for r in self.rows if r['id']==int(suffix.split('/')[2]))
+            name=suffix.split('name=')[1]
+            if any(a['name']==name for a in release['assets']): raise RemoteError(422)
+            self.counter+=1
+            value={'id':self.counter,'name':name,'size':Path(upload).stat().st_size}
+            self.contents[value['id']]=Path(upload).read_bytes(); release['assets'].append(value)
+            key=name
+        elif method=='PATCH':
+            value=next(r for r in self.rows if r['id']==int(suffix.split('/')[2]))
+            value.update(body); key='finalize'
+        else:
+            raise AssertionError((method,suffix))
+        if key in self.fail_after:
+            self.fail_after.remove(key)
+            raise RemoteError(0)
+        return value
+
+
+class DurablePublicationTests(unittest.TestCase):
+    def test_every_accepted_post_lost_response_is_adopted_once_without_overwrite(self):
+        for lost in ('release','container.age','descriptor.json'):
+            with self.subTest(lost=lost),tempfile.TemporaryDirectory() as d:
+                client=MemoryReleaseAPI(); client.fail_after.add(lost)
+                ciphertext=Path(d)/'cipher.age'; ciphertext.write_bytes(b'SYNTHETIC ciphertext')
+                first=client.publish('11111111-1111-4111-8111-111111111111',ciphertext,'o')
+                ciphertext.write_bytes(b'DIFFERENT regenerated random ciphertext')
+                second=client.publish('11111111-1111-4111-8111-111111111111',ciphertext,'o')
+                self.assertEqual(first['asset']['id'],second['asset']['id'])
+                self.assertEqual(len(client.rows),1)
+                self.assertEqual(len(client.posts),3)
+                self.assertEqual(client.contents[first['asset']['id']],b'SYNTHETIC ciphertext')
+                self.assertTrue(client.rows[0]['draft'])
+                client.fail_after.add('finalize')
+                client.finalize('11111111-1111-4111-8111-111111111111','o',first['release_id'])
+                self.assertFalse(client.rows[0]['draft'])
+
+    def test_checkpoint_plan_and_catalog_use_same_draft_release_four_assets(self):
+        with tempfile.TemporaryDirectory() as d:
+            client=MemoryReleaseAPI(); path=Path(d)/'synthetic.age'; path.write_bytes(b'SYNTHETIC')
+            identifier='11111111-1111-4111-8111-111111111111'
+            reserved=client.reserve(identifier)
+            plan=client.publish(identifier,path,'p',release_id=reserved['id'])
+            catalog=client.publish(identifier,path,'c',release_id=reserved['id'])
+            self.assertEqual(plan['release_id'],catalog['release_id'])
+            self.assertEqual(len(client.rows),1)
+            self.assertEqual({a['name'] for a in client.rows[0]['assets']},
+                             {'plan.age','plan-descriptor.json','catalog.age','descriptor.json'})
+            self.assertTrue(client.rows[0]['draft'])
+
+    def test_recover_asset_accepted_without_descriptor_never_uses_new_random_bytes(self):
+        with tempfile.TemporaryDirectory() as d:
+            client=MemoryReleaseAPI(); path=Path(d)/'synthetic.age'; path.write_bytes(b'SYNTHETIC original')
+            identifier='11111111-1111-4111-8111-111111111111'
+            result=client.publish(identifier,path,'o')
+            client.rows[0]['assets']=[a for a in client.rows[0]['assets'] if a['name']!='descriptor.json']
+            path.write_bytes(b'NEW random bytes')
+            adopted=client.publish(identifier,path,'o')
+            envelope=client.read_envelope(client.rows[0],identifier)
+            from csl_backup_core import hash_bytes
+            self.assertEqual(envelope['sha256'],hash_bytes(b'SYNTHETIC original'))
+            self.assertEqual(adopted['asset']['id'],result['asset']['id'])

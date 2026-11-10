@@ -40,16 +40,32 @@ class FakeStore:
         self.bytes_by_id = {}
         self.next_id = 10
         self.downloaded = []
-    def publish(self, identifier, ciphertext, kind):
+    def resolve_release(self, identifier, kind='c', release_id=None):
+        release = self.releases_by_tag.get('cslb-v1-' + kind + '-' + identifier)
+        if release_id is not None and release['id'] != release_id:
+            raise TransferError('synthetic misbound release')
+        return release
+    def reserve(self, identifier, kind='c'):
         tag = 'cslb-v1-' + kind + '-' + identifier
+        if tag not in self.releases_by_tag:
+            self.next_id += 1
+            self.releases_by_tag[tag] = {'id':self.next_id,'tag_name':tag,'assets':[],'draft':True}
+        return self.releases_by_tag[tag]
+    def finalize(self, identifier, kind, release_id):
+        self.resolve_release(identifier,kind,release_id)['draft']=False
+    def _descriptor(self, release, identifier, ciphertext, name='descriptor.json'):
+        return None
+    def publish(self, identifier, ciphertext, kind, *, release_id=None):
+        release=self.reserve(identifier, 'c' if kind=='p' else kind)
+        name={'o':'container.age','c':'catalog.age','p':'plan.age'}[kind]
+        found=[a for a in release['assets'] if a['name']==name]
+        if found:
+            return {'release_id':release['id'],'asset':found[0],'tag':release['tag_name']}
         self.next_id += 1
-        asset = {'id':self.next_id,'size':ciphertext.stat().st_size,
-                 'name':'container.age' if kind=='o' else 'catalog.age'}
+        asset = {'id':self.next_id,'size':ciphertext.stat().st_size,'name':name}
         self.bytes_by_id[asset['id']] = ciphertext.read_bytes()
-        self.next_id += 1
-        release = {'id':self.next_id,'tag_name':tag,'assets':[asset]}
-        self.releases_by_tag[tag] = release
-        return {'release_id':release['id'],'asset':asset,'tag':tag}
+        release['assets'].append(asset)
+        return {'release_id':release['id'],'asset':asset,'tag':release['tag_name']}
     def download(self, asset, target):
         self.downloaded.append(asset['id'])
         with exclusive_output(target) as staging:
@@ -57,8 +73,8 @@ class FakeStore:
     def request(self, method, suffix, body=None):
         assert method == 'GET'
         return self.releases_by_tag[suffix.removeprefix('/releases/tags/')]
-    def read_envelope(self, release, identifier):
-        asset = release['assets'][0]
+    def read_envelope(self, release, identifier, name='descriptor.json'):
+        asset = next(a for a in release['assets'] if a['name']==('plan.age' if name.startswith('plan') else 'container.age' if '-o-' in release['tag_name'] else 'catalog.age'))
         return {'format':'csl-backup-envelope','schema_version':1,'object_id':identifier,
                 'cipher':'age-v1-x25519','bytes':asset['size'],'sha256':hash_bytes(self.bytes_by_id[asset['id']])}
     def releases(self):
@@ -254,8 +270,8 @@ class BackupEngineTests(unittest.TestCase):
             return [packed for entry in entries for packed in real_pack(config,run_id,[entry],temporary)]
         new_pointer=str(uuid.uuid4())
         changed=[]
-        def steal_then_finish(identifier,ciphertext,kind):
-            value=real_publish(identifier,ciphertext,kind)
+        def steal_then_finish(identifier,ciphertext,kind,**kwargs):
+            value=real_publish(identifier,ciphertext,kind,**kwargs)
             if not changed:
                 item=self.control.state['sets'][self.config['set_id']]
                 item['epoch']+=1

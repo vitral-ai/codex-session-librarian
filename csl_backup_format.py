@@ -145,6 +145,8 @@ def cipher_limit(size, layout, members):
 
 
 def catalog(value, expected=None):
+    if isinstance(value, dict) and type(value.get("schema_version")) is int and value["schema_version"] == 2:
+        return catalog2(value, expected)
     base(value, "catalog")
     integer(value.get("repo_id"), 1)
     integer(value.get("lease_epoch"), 1)
@@ -190,4 +192,115 @@ def catalog(value, expected=None):
             selection.get("provider") != "codex" or selection.get("archives") is not True or
             type(selection.get("agent_forks")) is not bool):
         raise TransferError("Checkpoint coverage/archives contract differs")
+    return value
+
+
+def heads(value):
+    """Schema one selected every physical member; two has explicit logical heads."""
+    if value["schema_version"] == 1:
+        return [{"container_id": c["container_id"], "member_id": m["member_id"],
+                 "version_key": m["version_key"], "sha256": m["sha256"],
+                 "state": "current", "captured_at": m.get("captured_at", value["cut_at"]),
+                 "last_observed_at": m.get("captured_at", value["cut_at"])}
+                for c in value["containers"] for m in c["manifest"]["members"]]
+    return value["heads"]
+
+
+def selected(value, container):
+    ids = {h["member_id"] for h in heads(value) if h["container_id"] == container["container_id"]}
+    return [m for m in container["manifest"]["members"] if m["member_id"] in ids]
+
+
+def timestamp(value):
+    import datetime as dt
+    if not isinstance(value, str):
+        raise TransferError("Missing backup evidence date")
+    try:
+        parsed = dt.datetime.fromisoformat(value.replace("Z", "+00:00"))
+        if parsed.utcoffset() != dt.timedelta(0):
+            raise ValueError
+    except ValueError:
+        raise TransferError("Invalid backup evidence date") from None
+    return parsed
+
+
+def catalog2(value, expected=None):
+    # Validate immutable physical bindings using schema-one rules independently of
+    # logical selection. Old versions in a retained pack are deliberately allowed.
+    if value.get("format") != "csl-backup-catalog":
+        raise TransferError("Unknown backup catalog")
+    for name in ("set_id", "source_id", "run_id", "checkpoint_id"):
+        uid(value.get(name))
+    integer(value.get("repo_id"), 1)
+    integer(value.get("lease_epoch"), 1)
+    validate_fingerprint(value.get("fingerprint"))
+    if expected:
+        binding(value, expected)
+        if value["fingerprint"] != expected.get("fingerprint"):
+            raise TransferError("Checkpoint profile binding differs")
+    timestamp(value.get("cut_at"))
+    containers, selected_heads = value.get("containers"), value.get("heads")
+    if not isinstance(containers, list) or not 0 < len(containers) <= 10000 or not isinstance(selected_heads, list) or not 0 < len(selected_heads) <= 10000:
+        raise TransferError("Empty/oversize checkpoint")
+    physical, members, member_ids = {}, {}, set()
+    if sum(integer(c.get("bytes"), 1, MAX_OBJECT) for c in containers) > 2 * 1024**3:
+        raise TransferError("Checkpoint download budget exceeds 2 GiB")
+    for c in containers:
+        uid(c.get("container_id"))
+        checksum(c.get("sha256"))
+        integer(c.get("asset_id"), 1)
+        integer(c.get("release_id"), 1)
+        manifest(c.get("manifest"), value)
+        if c["container_id"] != c["manifest"]["container_id"] or c["container_id"] in physical:
+            raise TransferError("Duplicate or misbound physical container")
+        physical[c["container_id"]] = c
+        cipher_limit(c["bytes"], c["manifest"]["layout"], len(c["manifest"]["members"]))
+        for m in c["manifest"]["members"]:
+            if m["member_id"] in member_ids:
+                raise TransferError("Duplicate physical member identity")
+            member_ids.add(m["member_id"])
+            members[(c["container_id"], m["member_id"])] = m
+    seen, referenced = set(), set()
+    states = {"current": 0, "stale": 0, "missing_local": 0}
+    for h in selected_heads:
+        if not isinstance(h, dict):
+            raise TransferError("Invalid logical head")
+        m = members.get((h.get("container_id"), h.get("member_id")))
+        if m is None or h.get("sha256") != m["sha256"] or h.get("version_key") != m["version_key"]:
+            raise TransferError("Logical head is not bound to a physical member")
+        origin = m["origin"]["source_uuid"]
+        if origin in seen or h.get("state") not in states:
+            raise TransferError("Duplicate source or invalid logical head state")
+        seen.add(origin)
+        referenced.add(h["container_id"])
+        states[h["state"]] += 1
+        if timestamp(h.get("captured_at")) > timestamp(h.get("last_observed_at")):
+            raise TransferError("Head observation precedes captured content")
+    if referenced != set(physical):
+        raise TransferError("Unreferenced physical container in checkpoint")
+    counts, exclusions, failures = value.get("counts"), value.get("exclusions"), value.get("failures")
+    fields = {"eligible", "captured", "reused", "failed", "stale", "missing_local", "protected", "excluded"}
+    if not isinstance(counts, dict) or set(counts) != fields or not isinstance(exclusions, list) or not isinstance(failures, list):
+        raise TransferError("Missing checkpoint coverage fields")
+    for failure in failures:
+        if (not isinstance(failure, dict) or set(failure) != {"source_uuid", "reason_code"} or
+                not isinstance(failure["reason_code"], str) or
+                not re.fullmatch("[A-Za-z][A-Za-z0-9]{0,79}", failure["reason_code"])):
+            raise TransferError("Invalid checkpoint failure report")
+        if failure["source_uuid"] is not None:
+            uid(failure["source_uuid"])
+    for n in counts.values():
+        integer(n)
+    if (counts["captured"] + counts["reused"] != states["current"] or
+            counts["eligible"] != counts["captured"] + counts["reused"] + counts["failed"] or
+            counts["failed"] != len(failures) or counts["stale"] != states["stale"] or
+            counts["missing_local"] != states["missing_local"] or counts["protected"] != len(selected_heads) or
+            counts["excluded"] != len(exclusions) or counts["stale"] > counts["failed"]):
+        raise TransferError("Checkpoint coverage differs from logical heads")
+    status = "partial" if counts["failed"] else "complete"
+    if value.get("status") != status:
+        raise TransferError("False complete/partial checkpoint")
+    selection = value.get("selection", {})
+    if selection.get("provider") != "codex" or selection.get("archives") is not True or type(selection.get("agent_forks")) is not bool:
+        raise TransferError("Checkpoint selection differs")
     return value

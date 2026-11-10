@@ -40,6 +40,8 @@ class GitHub:
             raise TransferError("Selected GitHub CLI unavailable; authenticate explicitly outside CSL")
         self.server_time = None
         self.calls = 0
+        self.metrics = {"request_calls": 0, "metadata_calls": 0, "download_calls": 0, "downloaded_bytes": 0,
+                        "upload_calls": 0, "uploaded_bytes": 0}
         self.metadata = self.request("GET", "")
         if self.metadata.get("private") is not True:
             raise TransferError("Backup destination must remain private")
@@ -73,6 +75,11 @@ class GitHub:
         if upload:
             command += ["--input", str(upload), "-H", "Content-Type: application/octet-stream"]
         self.calls += 1
+        self.metrics["request_calls"] += 1
+        self.metrics["metadata_calls"] += int(upload is None)
+        if upload:
+            self.metrics["upload_calls"] += 1
+            self.metrics["uploaded_bytes"] += Path(upload).stat().st_size
         try:
             result = subprocess.run(command, input=canonical(body) if body is not None else None,
                                     capture_output=True, timeout=300)
@@ -104,6 +111,7 @@ class GitHub:
         command = self.command("GET", "repos/" + self.repo + "/releases/assets/" + str(asset["id"]))
         command += ["-H", "Accept: application/octet-stream"]
         self.calls += 1
+        self.metrics["download_calls"] += 1
         process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
         deadline, received = time.monotonic() + 300, 0
         try:
@@ -117,6 +125,7 @@ class GitHub:
                     if not chunk:
                         break
                     received += len(chunk)
+                    self.metrics["downloaded_bytes"] += len(chunk)
                     if received > asset["size"]:
                         raise TransferError("Encrypted asset exceeds declared size")
                     stream.write(chunk)
@@ -138,72 +147,112 @@ class GitHub:
                 return
         raise TransferError("Backup discovery budget exceeded; no truncated success")
 
-    def publish(self, identifier, ciphertext, kind):
-        self.revalidate(write=True)
-        if kind not in ("o", "c"):
-            raise TransferError("Unknown backup object kind")
+    def resolve_release(self, identifier, kind="c", release_id=None):
         tag = "cslb-v1-" + kind + "-" + identifier
-        try:
-            release = self.request("GET", "/releases/tags/" + tag)
-        except RemoteError as error:
-            if error.status != 404:
-                raise
+        if release_id is not None:
+            release = self.request("GET", "/releases/" + str(release_id))
+            if release.get("tag_name") != tag:
+                raise TransferError("Release ID/tag binding differs")
+            return release
+        # Draft tags are not reliably returned by GET-by-tag. List authenticated
+        # releases, including drafts; never recreate an uncertain POST blindly.
+        found = [r for r in self.releases() if r.get("tag_name") == tag]
+        if len(found) > 1:
+            raise TransferError("Duplicate backup release identity")
+        return found[0] if found else None
+
+    def reserve(self, identifier, kind="c"):
+        self.revalidate(write=True)
+        release = self.resolve_release(identifier, kind)
+        if release is None:
+            tag = "cslb-v1-" + kind + "-" + identifier
             head = self.request("GET", "/git/ref/heads/" + self.metadata["default_branch"])["object"]["sha"]
             try:
                 release = self.request("POST", "/releases", {"tag_name": tag, "target_commitish": head,
                     "name": tag, "body": "CSL encrypted backup; opaque metadata only.",
-                    "draft": False, "prerelease": False, "make_latest": "false"})
+                    "draft": True, "prerelease": False, "make_latest": "false"})
             except RemoteError:
-                release = self.request("GET", "/releases/tags/" + tag)
-        name = "container.age" if kind == "o" else "catalog.age"
+                release = self.resolve_release(identifier, kind)
+                if release is None:
+                    raise TransferError("Uncertain release POST; stable intention retained; no blind retry") from None
+        return release
+
+    def finalize(self, identifier, kind, release_id):
+        release = self.resolve_release(identifier, kind, release_id)
+        if release.get("draft"):
+            try:
+                release = self.request("PATCH", "/releases/" + str(release_id),
+                                       {"draft": False, "make_latest": "false"})
+            except RemoteError:
+                release = self.resolve_release(identifier, kind, release_id)
+                if release.get("draft"):
+                    raise TransferError("Uncertain release publication; intention retained") from None
+        return release
+
+    def publish(self, identifier, ciphertext, kind, *, release_id=None):
+        if kind not in ("o", "c", "p"):
+            raise TransferError("Unknown backup object kind")
+        release_kind = "c" if kind == "p" else kind
+        release = (self.resolve_release(identifier, release_kind, release_id) if release_id is not None
+                   else self.reserve(identifier, release_kind))
+        name = {"o": "container.age", "c": "catalog.age", "p": "plan.age"}[kind]
+        descriptor_name = "plan-descriptor.json" if kind == "p" else "descriptor.json"
         found = [a for a in release["assets"] if a["name"] == name]
         if len(found) > 1:
             raise TransferError("Duplicate encrypted asset")
         if found:
+            # Ciphertext is randomized. Caller must download/decrypt and compare
+            # the intended logical binding before adopting an existing instance.
             asset = found[0]
-            if asset["size"] != Path(ciphertext).stat().st_size:
-                raise TransferError("Conflicting existing encrypted asset; never overwrite")
-            if asset.get("digest") not in (None, "sha256:" + hash_file(ciphertext)):
-                raise TransferError("Existing asset digest conflicts; never overwrite")
-            descriptor = self._descriptor(release, identifier, ciphertext)
-            return {"release_id": release["id"], "asset": asset, "tag": tag, "descriptor": descriptor}
-        try:
-            asset = self.request("POST", "/releases/" + str(release["id"]) + "/assets?name=" + name, upload=ciphertext)
-        except RemoteError:
-            release = self.request("GET", "/releases/tags/" + tag)
-            found = [a for a in release["assets"] if a["name"] == name]
-            if len(found) != 1 or found[0]["size"] != Path(ciphertext).stat().st_size:
-                raise TransferError("Uncertain backup upload; inspect durable intent before retry")
-            asset = found[0]
-        release = self.request("GET", "/releases/tags/" + tag)
-        descriptor = self._descriptor(release, identifier, ciphertext)
-        return {"release_id": release["id"], "asset": asset, "tag": tag, "descriptor": descriptor}
+            if not any(a['name'] == descriptor_name for a in release['assets']):
+                with tempfile.TemporaryDirectory(prefix="csl-envelope-recovery-") as directory:
+                    accepted = Path(directory) / "accepted.age"
+                    self.download(asset, accepted)
+                    self._descriptor(release, identifier, accepted, descriptor_name)
+            else:
+                self.read_envelope(release, identifier, descriptor_name)
+        else:
+            try:
+                asset = self.request("POST", "/releases/" + str(release["id"]) + "/assets?name=" + name, upload=ciphertext)
+            except RemoteError:
+                release = self.resolve_release(identifier, release_kind, release["id"])
+                found = [a for a in release["assets"] if a["name"] == name]
+                if len(found) != 1:
+                    raise TransferError("Uncertain upload; durable intention retained; no blind retry") from None
+                asset = found[0]
+                # Never write an envelope from regenerated bytes for uncertain
+                # remote data. Download the accepted asset to derive its digest.
+            release = self.resolve_release(identifier, release_kind, release["id"])
+            with tempfile.TemporaryDirectory(prefix="csl-adopt-") as directory:
+                accepted = Path(directory) / "accepted.age"
+                self.download(asset, accepted)
+                self._descriptor(release, identifier, accepted, descriptor_name)
+        return {"release_id": release["id"], "asset": asset, "tag": release["tag_name"]}
 
-    def _descriptor(self, release, identifier, ciphertext):
+    def _descriptor(self, release, identifier, ciphertext, name="descriptor.json"):
         expected = {"format": "csl-backup-envelope", "schema_version": 1, "object_id": identifier,
                     "cipher": "age-v1-x25519", "bytes": Path(ciphertext).stat().st_size, "sha256": hash_file(ciphertext)}
-        found = [a for a in release["assets"] if a["name"] == "descriptor.json"]
+        found = [a for a in release["assets"] if a["name"] == name]
         if len(found) > 1:
             raise TransferError("Duplicate backup envelope")
         if found:
-            if self.read_envelope(release, identifier) != expected:
+            if self.read_envelope(release, identifier, name) != expected:
                 raise TransferError("Conflicting backup envelope; never overwrite")
             return found[0]
         with tempfile.TemporaryDirectory(prefix="csl-envelope-") as directory:
-            path = Path(directory) / "descriptor.json"
+            path = Path(directory) / name
             path.write_bytes(canonical(expected))
             path.chmod(0o600)
             try:
-                result = self.request("POST", "/releases/" + str(release["id"]) + "/assets?name=descriptor.json", upload=path)
+                return self.request("POST", "/releases/" + str(release["id"]) + "/assets?name=" + name, upload=path)
             except RemoteError:
-                release = self.request("GET", "/releases/tags/" + release["tag_name"])
-                if self.read_envelope(release, identifier) != expected:
-                    raise TransferError("Uncertain envelope upload; inspect durable intent")
-                result = next(a for a in release["assets"] if a["name"] == "descriptor.json")
-            return result
+                release = self.resolve_release(identifier, "c" if name.startswith("plan") else release["tag_name"].split("-")[2], release["id"])
+                if self.read_envelope(release, identifier, name) != expected:
+                    raise TransferError("Uncertain envelope upload; intention retained") from None
+                return next(a for a in release["assets"] if a["name"] == name)
 
-    def read_envelope(self, release, identifier):
-        found = [a for a in release["assets"] if a["name"] == "descriptor.json"]
+    def read_envelope(self, release, identifier, name="descriptor.json"):
+        found = [a for a in release["assets"] if a["name"] == name]
         if len(found) != 1 or not 0 < found[0]["size"] <= 4096:
             raise TransferError("Missing, duplicate or oversized opaque backup envelope")
         with tempfile.TemporaryDirectory(prefix="csl-envelope-read-") as directory:

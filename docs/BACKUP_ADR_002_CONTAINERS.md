@@ -87,3 +87,37 @@ when a mutation may already have completed.
 F0 gate remains subject to review of evidence, clocks/fencing/backend bounds and
 profile usefulness. F1 still needs operational keyring custody, atomic native
 installation/visibility and complete E1, not merely crypto or hash success.
+
+
+## F2 accepted refinement: logical heads and recoverable intentions
+
+Within AUTH-019, Manunruks accepted schema2 encrypted catalogs with explicit
+logical heads (container/member/hash/version), while physical manifests stay
+schema1 and immutable. New readers accept catalogs1/2; old readers reject2.
+P1 containing A1+B1 remains unchanged when P2 captures A2: a new catalog selects
+A2+B1 and restores exactly those heads. Old A1 remains recoverable from its old
+checkpoint, without being an extra restored conversation in the new checkpoint.
+Every referenced container is a GC root even if only one member remains selected;
+no automatic repack or remote deletion is introduced.
+
+A checkpoint reserves one draft release early, uploads encrypted `plan.age` and
+an opaque plan envelope, and later adds encrypted catalog plus its envelope.
+Thus F2 uses four assets/checkpoint, rather than F1's two. No separate plan release
+or conversation data/ciphertext in the Git control branch. The control contains
+opaque run/checkpoint/source IDs, base checkpoint and generation bindings only.
+Drafts are not healthy/restorable. Existing accepted ciphertext is adopted only
+after decrypting and matching the intended logical bindings, never overwritten.
+Lost journal recovery uses the remote encrypted plan and only demonstrable bytes.
+Missing never-uploaded bytes become explicit partial/failure, not current recapture.
+
+A new resume execution acquires a new fencing generation, including for the same
+run ID. Checking only owner=run ID would allow a paused previous process to wake
+and write. Artifact reservation epoch stays immutable; a fenced pointer records
+both that artifact epoch and the new commit generation. Compare base complete CP
+and expected prior epoch before takeover; stale renewals/commits fail.
+
+Incremental reuse carries old integral timestamps and records new lightweight
+availability separately. Full verification due after30days is visible and deferred
+until explicit verification/restore; there is no background job. Evidence in each
+catalog is immutable as-of publication; later local observer/asset/hash events do
+not alter previous catalogs or claim another environment's restored state.

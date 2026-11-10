@@ -394,7 +394,7 @@ against localhost, which stops before generation and uses no real API key.
 
 ## Documentation
 
-- [Experimental encrypted backup development manual](docs/BACKUP.md)
+- [Experimental encrypted backup development manual](docs/BACKUP.md) — F1/F2 native/portable checkpoints, incremental heads and durable resume; no timer or retention yet.
 - [CLI/provider command and content coverage](docs/PROVIDER_MATRIX.md)
 - [Canonical conversion and continuity checks](docs/CONVERSION.md)
 - [Team installation and contributions](docs/TEAM_INSTALL.md)

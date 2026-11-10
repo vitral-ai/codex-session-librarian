@@ -14,13 +14,17 @@ import zipfile
 
 import csl_backup_format as fmt
 from csl_backup_core import (BackupBusy, MAX_MANIFEST, MAX_OBJECT, NORMAL_CONTAINER, NAMESPACE,
-    canonical, capture, hash_bytes, hash_file, json_read, locked, now, save, source_kind, uid, zip_preflight, zip_read)
+    canonical, capture, header_source, zip_digest, zip_extract, hash_bytes, hash_file, json_read, locked, now, save, source_kind, uid, zip_preflight, zip_read)
 from csl_backup_crypto import BackupPolicyError
 from csl_backup_store import Control
 from csl_secrets import SecretReview
 from csl_transfer import (TransferError, export_bundle, inspect_bundle, json_line,
     publish_session_file, read_records, refresh_native_picker, rewrite_import_record, validate_compaction)
 from csl_display import project_file
+
+
+CAPTURE_BUDGET = 2 * 1024**3
+SOURCE_ENTRY_BUDGET = 10000
 
 
 class Backup:
@@ -30,26 +34,38 @@ class Backup:
         self.root = self.home / "csl-backup"
         self.control = Control(github)
 
-    def load(self, set_id):
-        value = fmt.config(json_read(self.root / "sets" / (uid(set_id) + ".json")))
+    def load(self, set_id, source_id=None):
+        path = self.root / "sets" / (uid(set_id) + ".json")
+        if source_id and (self.root / "sets" / set_id / (uid(source_id) + ".json")).exists():
+            path = self.root / "sets" / set_id / (source_id + ".json")
+        elif not source_id and any((self.root / "sets" / set_id).glob("*.json")):
+            raise TransferError("Multiple locally configured sources; select --source explicitly")
+        value = fmt.config(json_read(path))
+        if source_id is not None and value["source_id"] != source_id:
+            raise TransferError("Explicit source differs from local configuration")
         if value["repo_id"] != self.github.repo_id:
             raise TransferError("Configured backup repo ID differs")
         return value
 
     def initialize(self, *, set_name, source_name, profile, policy, recipients, key_reference,
-                   retain_accepted=False, include_agents=False):
+                   retain_accepted=False, include_agents=False, set_id=None):
         with locked(self.root):
             return self._initialize(set_name=set_name, source_name=source_name, profile=profile, policy=policy,
                 recipients=recipients, key_reference=key_reference, retain_accepted=retain_accepted,
-                include_agents=include_agents)
+                include_agents=include_agents, set_id=set_id)
 
     def _initialize(self, *, set_name, source_name, profile, policy, recipients, key_reference,
-                    retain_accepted=False, include_agents=False):
+                    retain_accepted=False, include_agents=False, set_id=None):
         if any(not isinstance(name, str) or not 0 < len(name) <= 80 for name in (set_name, source_name)):
             raise TransferError("Backup set/source labels must contain 1 to 80 characters")
+        if set_id is not None:
+            uid(set_id)
+            _, state = self.control.read()
+            if set_id not in state["sets"]:
+                raise TransferError("Explicit set must already exist remotely; no implicit source adoption")
         value = {"format": "csl-backup-config", "schema_version": 1,
             "repo": self.github.repo, "repo_id": self.github.repo_id,
-            "set_id": str(uuid.uuid4()), "source_id": str(uuid.uuid4()),
+            "set_id": set_id or str(uuid.uuid4()), "source_id": str(uuid.uuid4()),
             "set_name": set_name, "source_name": source_name,
             "profile": profile, "secret_policy": policy, "recipients": self.age.recipients(recipients),
             "key_reference": key_reference, "retain_accepted": retain_accepted,
@@ -58,107 +74,176 @@ class Backup:
         if not self.github.metadata.get("permissions", {}).get("push"):
             raise TransferError("Backup init requires existing repository write permission")
         desired = {k: v for k, v in value.items() if k not in ("set_id", "source_id", "created_at")}
-        for path in (self.root / "sets").glob("*.json"):
+        for path in (self.root / "sets").rglob("*.json"):
             existing = fmt.config(json_read(path))
-            if existing["set_name"] != set_name:
+            if set_id is not None:
+                if existing["set_id"] != set_id or existing["source_name"] != source_name:
+                    continue
+            elif existing["set_name"] != set_name:
                 continue
             compared = {k: v for k, v in existing.items() if k not in ("set_id", "source_id", "created_at")}
             if desired != compared:
                 raise TransferError("Backup set label already has different configuration; no silent second source or profile change")
             return {"set_id": existing["set_id"], "source_id": existing["source_id"], "repo_id": existing["repo_id"],
                     "status": "already configured; no backup captured or timer enabled"}
-        save(self.root / "sets" / (value["set_id"] + ".json"), value, exclusive=True)
+        path = (self.root / "sets" / value["set_id"] / (value["source_id"] + ".json") if set_id is not None
+                else self.root / "sets" / (value["set_id"] + ".json"))
+        save(path, value, exclusive=True)
         return {"set_id": value["set_id"], "source_id": value["source_id"], "repo_id": value["repo_id"],
                 "status": "configured; no backup captured or timer enabled"}
 
     def _lease(self, config, run_id, *, checkpoint=None, catalog_binding=None, intents=None,
-               acquire=False, expected_epoch=None):
+               acquire=False, expected_epoch=None, base_checkpoint=None, partial=False, run_binding=None):
         def mutate(state, clock):
             if config["set_id"] not in state["sets"] and not acquire:
                 raise BackupBusy("Backup lease no longer registered")
             item = state["sets"].setdefault(config["set_id"], {"epoch": 0, "owner": "", "expires": 0,
-                "sources": {config["source_id"]: {"latest_complete": None}}, "intents": []})
-            if set(item["sources"]) != {config["source_id"]}:
-                raise TransferError("F1 rejects a second source in an existing backup set")
+                "sources": {}, "intents": []})
+            source = item["sources"].setdefault(config["source_id"], {"latest_complete": None, "latest_partial": None})
             if acquire:
-                if item["owner"] and item["expires"] > clock:
+                if expected_epoch is not None:
+                    if item["epoch"] != expected_epoch:
+                        raise BackupBusy("Resume lost its expected epoch; cannot acquire")
+                    registered = item.get("runs", {}).get(run_id)
+                    if (registered and (registered.get("source_id") != config["source_id"] or
+                            registered.get("base_checkpoint") != base_checkpoint or registered.get("retired"))):
+                        raise BackupBusy("Resume intention retired or misbound")
+                    if not registered and item["owner"] != run_id:
+                        raise BackupBusy("Resume intention no longer registered")
+                    if item["owner"] not in ("", run_id) and item["expires"] > clock:
+                        raise BackupBusy("Backup busy: another writer owns the remote lease")
+                elif item["owner"] and item["expires"] > clock:
                     raise BackupBusy("Backup busy: another writer owns the remote lease")
                 item.update(owner=run_id, epoch=item["epoch"] + 1)
             elif item["owner"] != run_id or item["epoch"] != expected_epoch or item["expires"] <= clock:
                 raise BackupBusy("Writer lost lease/epoch; cannot reacquire or publish pointer")
+            if base_checkpoint != source.get("latest_complete"):
+                raise BackupBusy("Base checkpoint changed; old run cannot publish pointer")
             item["expires"] = clock + 600
             if intents is not None:
                 item["intents"] = list(intents)
+            if run_binding is not None:
+                previous = item.setdefault("runs", {}).get(run_id)
+                if previous and previous != run_binding:
+                    stable_previous = {k: v for k, v in previous.items() if k != "lease_epoch"}
+                    stable_next = {k: v for k, v in run_binding.items() if k != "lease_epoch"}
+                    if (stable_previous != stable_next or run_binding["lease_epoch"] != expected_epoch or
+                            run_binding["lease_epoch"] <= previous["lease_epoch"]):
+                        raise TransferError("Remote run intention binding differs")
+                item["runs"][run_id] = run_binding
             if checkpoint:
-                item["sources"][config["source_id"]].update(latest_complete=checkpoint,
-                    catalog=catalog_binding, committed_at=now())
+                name = "latest_partial" if partial else "latest_complete"
+                source.update({name: checkpoint, "latest_checkpoint": checkpoint, "partial_catalog" if partial else "catalog": catalog_binding,
+                               "committed_at": now()})
                 item.update(owner="", expires=clock, intents=[])
         return self.control.change(mutate)["sets"][config["set_id"]]["epoch"]
 
     def _entries(self, config, temporary):
-        captures, excluded, seen = [], [], set()
+        captures, excluded, seen, failures = [], [], set(), []
+        captured_bytes, scanned = 0, 0
         for archived, folder in ((False, self.home / "sessions"), (True, self.home / "archived_sessions")):
-            for source in sorted(folder.rglob("rollout-*.jsonl")):
-                target = temporary / ("capture-" + str(uuid.uuid4()) + ".jsonl")
-                result = capture(source, target)
-                sid, metadata = result["source_uuid"], result.pop("metadata")
-                if sid in seen:
-                    raise TransferError("Duplicate source UUID; not choosing by modification date")
-                seen.add(sid)
-                kind = source_kind(metadata.get("source", "cli"))
-                origin = {"set_id": config["set_id"], "source_id": config["source_id"], "provider": "codex", "source_uuid": sid}
-                if kind == "noninteractive" or kind == "agent" and not config["agent_forks"]:
-                    excluded.append({"origin": origin, "reason": "noninteractive_source" if kind == "noninteractive" else "agent_forks_not_selected"})
-                    target.unlink()
-                    continue
-                review = SecretReview(SimpleNamespace())
-                pending = set()
-                with target.open("rb") as stream:
-                    for record in read_records(stream):
-                        review.scan(record, "capture")
-                        payload = record.get("payload", {})
-                        if payload.get("type") in ("function_call", "custom_tool_call"):
-                            pending.add(payload.get("call_id", "unknown"))
-                        elif payload.get("type") in ("function_call_output", "custom_tool_call_output"):
-                            pending.discard(payload.get("call_id"))
-                if review.findings and config["secret_policy"] == "stop":
-                    raise BackupPolicyError("Backup blocked by partial secret review; configure an explicit encrypted policy")
-                losses = ["external dependencies are not captured", "global indexes/auth/config are excluded"]
-                if result["message_records"] == 0:
-                    losses.append("empty/pending native state; no user/assistant message yet; restore quarantined unless separately supported")
-                source_sha = result["sha256"]
-                result["compaction_state_removed"] = False
-                if config["profile"] == "portable-age-v1":
+            for source in folder.rglob("rollout-*.jsonl"):
+                scanned += 1
+                if scanned > SOURCE_ENTRY_BUDGET:
+                    raise TransferError("Source discovery exceeds 10000 histories; no truncated checkpoint")
+                try:
+                    header = header_source(source)
+                    if header is not None:
+                        kind = source_kind(header.get("source", "cli"))
+                        if kind == "noninteractive" or kind == "agent" and not config["agent_forks"]:
+                            sid = header["id"]
+                            if sid in seen:
+                                raise TransferError("Duplicate source UUID")
+                            seen.add(sid)
+                            excluded.append({"origin": {"set_id": config["set_id"], "source_id": config["source_id"],
+                                "provider": "codex", "source_uuid": sid},
+                                "reason": "noninteractive_source" if kind == "noninteractive" else "agent_forks_not_selected"})
+                            continue
+                    target = temporary / ("capture-" + str(uuid.uuid4()) + ".jsonl")
+                    if len(captures) >= SOURCE_ENTRY_BUDGET or captured_bytes + source.stat().st_size > CAPTURE_BUDGET:
+                        raise TransferError("Backup capture/run budget exceeded before copying")
+                    result = capture(source, target)
+                    captured_bytes += result["bytes"]
+                    sid, metadata = result["source_uuid"], result.pop("metadata")
+                    if sid in seen:
+                        raise TransferError("Duplicate source UUID; not choosing by modification date")
+                    seen.add(sid)
+                    kind = source_kind(metadata.get("source", "cli"))
+                    origin = {"set_id": config["set_id"], "source_id": config["source_id"], "provider": "codex", "source_uuid": sid}
+                    if kind == "noninteractive" or kind == "agent" and not config["agent_forks"]:
+                        excluded.append({"origin": origin, "reason": "noninteractive_source" if kind == "noninteractive" else "agent_forks_not_selected"})
+                        target.unlink()
+                        continue
+                    review = SecretReview(SimpleNamespace())
+                    pending = set()
+                    with target.open("rb") as stream:
+                        for record in read_records(stream):
+                            review.scan(record, "capture")
+                            payload = record.get("payload", {})
+                            if payload.get("type") in ("function_call", "custom_tool_call"):
+                                pending.add(payload.get("call_id", "unknown"))
+                            elif payload.get("type") in ("function_call_output", "custom_tool_call_output"):
+                                pending.discard(payload.get("call_id"))
+                    if review.findings and config["secret_policy"] == "stop":
+                        raise BackupPolicyError("Backup blocked by partial secret review; configure an explicit encrypted policy")
+                    losses = ["external dependencies are not captured", "global indexes/auth/config are excluded"]
                     if result["message_records"] == 0:
-                        raise TransferError("Portable exporter cannot represent this empty/pending native session; explicitly choose native-age-v1")
-                    bundle = temporary / ("portable-" + str(uuid.uuid4()) + ".zip")
-                    args = SimpleNamespace(sessions=[str(target)], provider="codex", db=self.root / "lookup.sqlite",
-                        to=bundle, raw=False, repair_legacy_compaction=False,
-                        allow_secrets=config["secret_policy"] == "retain", scrub_secrets=config["secret_policy"] == "scrub")
-                    export_bundle(args, self.csl, quiet=True, scan_secrets=config["secret_policy"] == "scrub")
-                    with zipfile.ZipFile(bundle) as archive:
-                        entry = inspect_bundle(archive)["sessions"][0]
-                        result["compaction_state_removed"] = bool(entry.get("compaction_state_removed", False))
-                        derived = temporary / ("derived-" + str(uuid.uuid4()) + ".jsonl")
-                        derived.write_bytes(archive.read(entry["file"]))
-                    target = derived
-                    losses.extend(["JSON reserialization", "encrypted reasoning/state omitted when present"])
-                    if config["secret_policy"] == "scrub":
-                        losses.append("detected readable values scrubbed; coverage partial")
-                state = "archived" if archived else "agent" if kind == "agent" else "interactive"
-                fp = fmt.fingerprint(config)
-                identity = {"origin": origin, "source_sha256": source_sha, "state": state, "fingerprint": fp}
-                result.update(origin=origin, state=state, fingerprint=fp, source_sha256=source_sha,
-                    version_key=hash_bytes(canonical(identity)), losses=losses, pending_tool_calls=sorted(pending),
-                    bytes=target.stat().st_size, sha256=hash_file(target))
-                captures.append((target, result))
-                if len(captures) > 10000 or sum(item[1]["bytes"] for item in captures) > 2 * 1024**3:
-                    raise TransferError("Backup capture/run budget exceeded; no truncation")
-        if not captures:
-            raise TransferError("No eligible sessions; not publishing an empty complete backup")
-        if len(captures) > 10000 or sum(item[1]["bytes"] for item in captures) > 2 * 1024**3:
-            raise TransferError("Backup capture/run budget exceeded; no truncation")
-        return captures, excluded
+                        losses.append("empty/pending native state; no user/assistant message yet; restore quarantined unless separately supported")
+                    source_sha = result["sha256"]
+                    result["compaction_state_removed"] = False
+                    if config["profile"] == "portable-age-v1":
+                        if result["message_records"] == 0:
+                            raise TransferError("Portable exporter cannot represent this empty/pending native session; explicitly choose native-age-v1")
+                        bundle = temporary / ("portable-" + str(uuid.uuid4()) + ".zip")
+                        args = SimpleNamespace(sessions=[str(target)], provider="codex", db=self.root / "lookup.sqlite",
+                            to=bundle, raw=False, repair_legacy_compaction=False,
+                            allow_secrets=config["secret_policy"] == "retain", scrub_secrets=config["secret_policy"] == "scrub")
+                        export_bundle(args, self.csl, quiet=True, scan_secrets=config["secret_policy"] == "scrub")
+                        with zipfile.ZipFile(bundle) as archive:
+                            entry = inspect_bundle(archive)["sessions"][0]
+                            result["compaction_state_removed"] = bool(entry.get("compaction_state_removed", False))
+                            derived = temporary / ("derived-" + str(uuid.uuid4()) + ".jsonl")
+                            derived.write_bytes(archive.read(entry["file"]))
+                        target = derived
+                        losses.extend(["JSON reserialization", "encrypted reasoning/state omitted when present"])
+                        if config["secret_policy"] == "scrub":
+                            losses.append("detected readable values scrubbed; coverage partial")
+                    state = "archived" if archived else "agent" if kind == "agent" else "interactive"
+                    fp = fmt.fingerprint(config)
+                    identity = {"origin": origin, "source_sha256": source_sha, "state": state, "fingerprint": fp}
+                    result.update(origin=origin, state=state, fingerprint=fp, source_sha256=source_sha,
+                        version_key=hash_bytes(canonical(identity)), losses=losses, pending_tool_calls=sorted(pending),
+                        bytes=target.stat().st_size, sha256=hash_file(target))
+                    captures.append((target, result))
+                    if len(captures) > 10000 or sum(item[1]["bytes"] for item in captures) > CAPTURE_BUDGET:
+                        raise TransferError("Backup capture/run budget exceeded; no truncation")
+                except BackupPolicyError:
+                    raise
+                except (TransferError, OSError, ValueError) as error:
+                    # No path or text is recorded in the public diagnostic. The
+                    # native UUID from a bounded header permits last-good binding.
+                    sid = None
+                    try:
+                        with source.open("rb") as stream:
+                            header = json.loads(stream.readline(1024**2))
+                        sid = uid(header["payload"]["id"])
+                    except (ValueError, KeyError, TypeError, OSError, TransferError):
+                        pass
+                    failures.append({"source_uuid": sid, "reason_code": type(error).__name__})
+        distinct_failures, failure_ids = [], set()
+        for failure in failures:
+            sid = failure["source_uuid"]
+            if sid is None or sid not in failure_ids:
+                distinct_failures.append(failure)
+            failure_ids.add(sid)
+        failures = distinct_failures
+        failed_ids = {failure["source_uuid"] for failure in failures if failure["source_uuid"] is not None}
+        # Ambiguous duplicate UUIDs invalidate every candidate for that origin;
+        # filesystem traversal order can never choose a seemingly good winner.
+        captures = [(path, entry) for path, entry in captures if entry["origin"]["source_uuid"] not in failed_ids]
+        excluded = [entry for entry in excluded if entry["origin"]["source_uuid"] not in failed_ids]
+        self._last_capture_bytes = captured_bytes
+        return captures, excluded, failures
 
     def _pack(self, config, run_id, entries, temporary):
         groups, group, size = [], [], 0
@@ -181,9 +266,12 @@ class Backup:
                 "container_id": container_id, "fingerprint": fmt.fingerprint(config), "layout": layout,
                 "members": [entry for _, entry in group]}
             fmt.manifest(manifest, {**config, "fingerprint": fmt.fingerprint(config)})
+            manifest_bytes = canonical(manifest)
+            if len(manifest_bytes) > MAX_MANIFEST:
+                raise TransferError("Container manifest exceeds metadata budget before upload")
             plain, encrypted = temporary / (container_id + ".zip"), temporary / (container_id + ".age")
             with zipfile.ZipFile(plain, "w", compression=zipfile.ZIP_STORED) as archive:
-                archive.writestr("manifest.json", canonical(manifest))
+                archive.writestr("manifest.json", manifest_bytes)
                 for source, entry in group:
                     archive.write(source, entry["file"])
             self.age.encrypt(plain, encrypted, config["recipients"])
@@ -191,71 +279,9 @@ class Backup:
             packed.append((encrypted, manifest))
         return packed
 
-    def run(self, config, identity, *, dry_run=False):
-        started = time.monotonic()
-        if not self.github.metadata.get("permissions", {}).get("push"):
-            raise TransferError("Backup requires existing write permission")
-        self.root.mkdir(parents=True, mode=0o700, exist_ok=True)
-        run_id, checkpoint_id = str(uuid.uuid4()), str(uuid.uuid4())
-        with locked(self.root), tempfile.TemporaryDirectory(prefix="capture-", dir=self.root) as directory:
-            temporary = Path(directory)
-            entries, exclusions = self._entries(config, temporary)
-            packed = self._pack(config, run_id, entries, temporary)
-            if dry_run:
-                return {"status": "planned", "sessions": len(entries), "containers": len(packed),
-                        "ciphertext_bytes": sum(p.stat().st_size for p, _ in packed), "remote_writes": 0}
-            epoch = self._lease(config, run_id, acquire=True)
-            intents = [m["container_id"] for _, m in packed] + [checkpoint_id]
-            save(self.root / "runs" / (run_id + ".json"), {"schema_version": 1, "run_id": run_id,
-                "repo_id": config["repo_id"], "set_id": config["set_id"], "objects": intents, "state": "planned"}, exclusive=True)
-            self._lease(config, run_id, intents=intents, expected_epoch=epoch)
-            containers = []
-            for encrypted, manifest in packed:
-                if time.monotonic() - started > 3600:
-                    raise TransferError("One-hour backup budget exceeded; previous complete checkpoint retained")
-                self._lease(config, run_id, intents=intents, expected_epoch=epoch)
-                published = self.github.publish(manifest["container_id"], encrypted, "o")
-                checked = temporary / (manifest["container_id"] + ".checked.age")
-                self.github.download(published["asset"], checked)
-                if hash_file(checked) != hash_file(encrypted):
-                    raise TransferError("Uploaded ciphertext verification failed")
-                plain = temporary / (manifest["container_id"] + ".checked.zip")
-                self.age.decrypt(checked, plain, identity)
-                self._verify_container(plain, manifest)
-                containers.append({"container_id": manifest["container_id"], "release_id": published["release_id"],
-                    "asset_id": published["asset"]["id"], "bytes": checked.stat().st_size, "sha256": hash_file(checked),
-                    "manifest": manifest, "integrity_verified_at": now()})
-            catalog = {"format": "csl-backup-catalog", "schema_version": 1, "repo_id": config["repo_id"],
-                "set_id": config["set_id"], "source_id": config["source_id"], "run_id": run_id,
-                "checkpoint_id": checkpoint_id, "fingerprint": fmt.fingerprint(config), "lease_epoch": epoch,
-                "cut_at": now(), "status": "complete", "failures": [], "exclusions": exclusions,
-                "selection": {"provider": "codex", "archives": True, "agent_forks": config["agent_forks"]},
-                "counts": {"eligible": len(entries), "succeeded": len(entries), "failed": 0, "excluded": len(exclusions)},
-                "containers": containers}
-            fmt.catalog(catalog, {**config, "fingerprint": fmt.fingerprint(config)})
-            plain_catalog = temporary / "catalog.json"
-            save(plain_catalog, catalog, exclusive=True)
-            if plain_catalog.stat().st_size > MAX_MANIFEST:
-                raise TransferError("Checkpoint metadata exceeds budget")
-            encrypted_catalog = temporary / "catalog.age"
-            self.age.encrypt(plain_catalog, encrypted_catalog, config["recipients"])
-            self._lease(config, run_id, intents=intents, expected_epoch=epoch)
-            published = self.github.publish(checkpoint_id, encrypted_catalog, "c")
-            checked = temporary / "catalog.checked.age"
-            self.github.download(published["asset"], checked)
-            if hash_file(checked) != hash_file(encrypted_catalog):
-                raise TransferError("Published catalog ciphertext differs")
-            decrypted = temporary / "catalog.checked.json"
-            self.age.decrypt(checked, decrypted, identity)
-            fmt.catalog(json_read(decrypted), {**config, "fingerprint": fmt.fingerprint(config)})
-            pointer = {"release_id": published["release_id"], "asset_id": published["asset"]["id"],
-                       "bytes": checked.stat().st_size, "sha256": hash_file(checked), "lease_epoch": epoch}
-            self._lease(config, run_id, checkpoint=checkpoint_id, catalog_binding=pointer, expected_epoch=epoch)
-            save(self.root / "runs" / (run_id + ".json"), {"schema_version": 1, "run_id": run_id,
-                "repo_id": config["repo_id"], "set_id": config["set_id"], "objects": intents,
-                "checkpoint_id": checkpoint_id, "state": "complete", "completed_at": now()})
-            return {"status": "complete", "checkpoint_id": checkpoint_id, "run_id": run_id,
-                    "sessions": len(entries), "containers": len(containers), "repo_id": config["repo_id"]}
+    def run(self, config, identity, *, dry_run=False, resume=None):
+        from csl_backup_incremental import run
+        return run(self, config, identity, dry_run=dry_run, resume=resume)
 
     @staticmethod
     def _verify_container(path, expected):
@@ -271,8 +297,7 @@ class Backup:
             for entry in actual["members"]:
                 if archive.getinfo(entry["file"]).file_size != entry["bytes"]:
                     raise TransferError("Member declared size differs")
-                if hash_bytes(zip_read(archive, entry["file"])) != entry["sha256"]:
-                    raise TransferError("Member checksum differs")
+                zip_digest(archive, entry)
         return actual
 
     def discover(self, *, scan=False):
@@ -282,7 +307,18 @@ class Backup:
                                if r["tag_name"].startswith("cslb-v1-c-")],
                 "warning": "Candidates are not validated checkpoints; no pointers repaired"}
         _, state = self.control.read()
-        return {"repo_id": self.github.repo_id, "sets": state["sets"],
+        paths = list((self.root / "events").glob("*.json"))
+        if len(paths) > 10000:
+            raise TransferError("Local evidence budget exceeded; no truncated status")
+        events = [json_read(path) for path in paths]
+        events = [event for event in events if event.get("repo_id") == self.github.repo_id]
+        run_paths = list((self.root / "runs").glob("*/journal.json"))
+        if len(run_paths) > 10000:
+            raise TransferError("Local run metadata budget exceeded; no truncated status")
+        summaries = [json_read(path).get("summary") for path in run_paths]
+        summaries = [summary for summary in summaries if summary and summary.get("repo_id") == self.github.repo_id]
+        return {"repo_id": self.github.repo_id, "sets": state["sets"], "local_events": events,
+                "local_runs_as_of": summaries,
                 "evidence": "referenced control metadata only; no ciphertext integrity check"}
 
     def latest(self, set_id=None, source_id=None):
@@ -298,6 +334,8 @@ class Backup:
 
     def _asset(self, identifier, kind, expected=None):
         release = self.github.request("GET", "/releases/tags/cslb-v1-" + kind + "-" + uid(identifier))
+        if release.get("draft") is True:
+            raise TransferError("Draft/plan is not a restorable backup")
         name = "catalog.age" if kind == "c" else "container.age"
         assets = [a for a in release["assets"] if a["name"] == name]
         if len(assets) != 1:
@@ -310,7 +348,8 @@ class Backup:
             raise TransferError("Backup asset identity/size differs from catalog/control")
         return {**assets[0], "expected_sha256": envelope["sha256"]}
 
-    def _read_checkpoint(self, checkpoint, identity, temporary, *, set_id=None, source_id=None):
+    def _read_checkpoint(self, checkpoint, identity, temporary, *, set_id=None, source_id=None,
+                         metadata_only=False, allow_partial=False):
         expected = None
         if checkpoint == "latest":
             set_id, source_id, source = self.latest(set_id, source_id)
@@ -330,6 +369,10 @@ class Backup:
                 set_id is not None and catalog["set_id"] != set_id or
                 source_id is not None and catalog["source_id"] != source_id):
             raise TransferError("Requested checkpoint/set/source binding differs")
+        if catalog["status"] == "partial" and not allow_partial:
+            raise TransferError("Partial checkpoint requires explicit --allow-partial")
+        if metadata_only:
+            return catalog, []
         objects = []
         for container in catalog["containers"]:
             asset = self._asset(container["container_id"], "o", container)
@@ -352,8 +395,10 @@ class Backup:
             "repo_id": catalog["repo_id"], "set_id": catalog["set_id"], "object_id": container["container_id"],
             "asset_id": container["asset_id"], "asset_sha256": container["sha256"],
             "operation": operation, "at": now(), "result": result,
-            "level": "restored" if operation == "restore" else "integrity_verified",
+            "level": "restored" if operation == "restore" else "available" if operation == "available" else "integrity_verified",
             "scope": "full ciphertext/plain manifest/member hashes", "native_validation": validation}
+        if operation == "available":
+            event["scope"] = "remote asset/envelope identity and size; no ciphertext download"
         event["source_id"] = catalog["source_id"]
         if operation == "restore":
             if not member or not installed:
@@ -388,9 +433,9 @@ class Backup:
                     from csl_probe import native_replay
                     with zipfile.ZipFile(plain) as archive:
                         zip_preflight(archive)
-                        for entry in container["manifest"]["members"]:
+                        for entry in fmt.selected(catalog, container):
                             source = temporary / (entry["member_id"] + ".jsonl")
-                            source.write_bytes(zip_read(archive, entry["file"]))
+                            zip_extract(archive, entry, source)
                             result = native_replay(source, "codex")
                             native_results.append(result)
                     validation = "structural"  # Probe result is returned separately, never inferred from hashes.
@@ -399,22 +444,22 @@ class Backup:
                     "containers": len(objects), "native": native_results,
                     "scope": "bytes/structure; native request probes separate; no paid model generation"}
 
-    def restore(self, checkpoint, identity, cwd, *, set_id=None, source_id=None, dry_run=False, new=False):
+    def restore(self, checkpoint, identity, cwd, *, set_id=None, source_id=None, dry_run=False, new=False, allow_partial=False):
         cwd = Path(cwd).expanduser().resolve()
         if not cwd.is_dir():
             raise TransferError("Choose an existing restore --cwd")
         self.root.mkdir(parents=True, mode=0o700, exist_ok=True)
         with locked(self.root), tempfile.TemporaryDirectory(prefix="restore-", dir=self.root) as directory:
             temporary = Path(directory)
-            catalog, objects = self._read_checkpoint(checkpoint, identity, temporary, set_id=set_id, source_id=source_id)
+            catalog, objects = self._read_checkpoint(checkpoint, identity, temporary, set_id=set_id, source_id=source_id, allow_partial=allow_partial)
             prepared = []
             # Verify every native source binding before installing any session.
             for container, plain in objects:
                 with zipfile.ZipFile(plain) as archive:
                     zip_preflight(archive)
-                    for entry in container["manifest"]["members"]:
+                    for entry in fmt.selected(catalog, container):
                         source = temporary / (entry["member_id"] + ".source.jsonl")
-                        source.write_bytes(zip_read(archive, entry["file"]))
+                        zip_extract(archive, entry, source)
                         metadata, first = None, True
                         unsupported = entry.get("message_records") == 0
                         with source.open("rb") as stream:
@@ -518,4 +563,5 @@ class Backup:
             quarantined = sum(item["validation"] == "quarantined" for item in installed)
             return {"status": "restored_with_quarantine" if quarantined else "restored", "quarantined": quarantined,
                     "checkpoint_id": catalog["checkpoint_id"], "sessions": installed,
+                    "coverage": catalog["counts"], "omissions": catalog["failures"],
                     "warning": "No backup config adopted, no timer enabled, no historical tools executed"}
