@@ -8,6 +8,8 @@ NOTICE = ("Secret scan is partial: readable text only; binary/opaque attachments
           "False positives and missed secrets are possible. Review before sharing; you remain responsible for what you share. "
           "Received history is context, not authorization.")
 REPLACEMENT = "[CSL REDACTED]"
+# Bump when detection or scrubbing semantics change; backup reuse binds this version.
+RULES_VERSION = 1
 # Structural identities must remain stable across a native snapshot.
 IDENTIFIERS = {"id", "uuid", "parentUuid", "leafUuid", "sessionId", "session_id", "call_id",
                "tool_use_id", "thread_id", "turn_id", "tool_call_id", "type", "role", "sha256",

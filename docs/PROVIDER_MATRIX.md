@@ -22,6 +22,7 @@ registry. Update implementation, tests and this document in the same change.
 | Command | Codex | Claude Code |
 | --- | --- | --- |
 | `annotate` | supported | not-integrated |
+| `backup` | experimental | not-integrated |
 | `capabilities` | supported | supported |
 | `cockpit` | supported | not-integrated |
 | `convert` | experimental | experimental |
@@ -64,6 +65,11 @@ the normal interactive resume list, with a small migration index. It excludes
 archives/non-interactive sources and does not migrate project files or accounts.
 `migrate cleanup` previews by default and archives unchanged originals only with
 `--confirm-restored`; it never deletes files. See [migration](SHARING.md#computer-migration).
+
+`backup` is experimental Linux/Codex-only development, separate from migration and
+team sharing. F1 provides manual full encrypted checkpoints with native/portable
+profiles and explicit custody/policies. It does not imply incremental reuse,
+scheduling, retention or a published release. See [backup scope](BACKUP.md).
 
 Codex portable export/share and migration upload support explicit
 `--repair-legacy-compaction` for the recognized orphaned final summary annotation

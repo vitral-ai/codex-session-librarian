@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Experimental Linux/Codex manual encrypted backup development: native byte
+  captures, explicit portable profile, bounded age containers/catalogs, isolated
+  cold restore, fenced control, per-session durable restore intents and receipts.
+  No incremental reuse, scheduling, retention or real-data activation implied by
+  this F1 cut; see `docs/BACKUP_F1_REVIEW.md` and the development manual.
+
 No changes after v0.1.1 yet.
 
 ## 0.1.1 — 2026-11-09

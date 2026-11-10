@@ -394,6 +394,7 @@ against localhost, which stops before generation and uses no real API key.
 
 ## Documentation
 
+- [Experimental encrypted backup development manual](docs/BACKUP.md)
 - [CLI/provider command and content coverage](docs/PROVIDER_MATRIX.md)
 - [Canonical conversion and continuity checks](docs/CONVERSION.md)
 - [Team installation and contributions](docs/TEAM_INSTALL.md)
