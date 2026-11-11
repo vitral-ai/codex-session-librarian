@@ -1,6 +1,9 @@
 # Team Install
 
-This guide is for a teammate or another local agent using Context Session Librarian on Fedora 43 or a similar Linux environment.
+This guide covers installing Context Session Librarian on Linux and connecting
+a team's private conversation exchange. It can be followed directly or with a
+coding assistant. Example UUIDs, titles and cut markers must be replaced with
+values from your own conversations.
 
 ## What You Need
 
@@ -9,19 +12,21 @@ This guide is for a teammate or another local agent using Context Session Librar
 - Python 3.11 or newer available in the shell
 - `~/.local/bin` on `PATH` if installing to the default location
 
-This tool uses only the Python standard library. No virtualenv or external packages are required.
+The core CLI uses only the Python standard library; no virtualenv or pip install
+is required. Optional media conversion and backup have separate dependencies;
+see the [coverage and requirements](PROVIDER_MATRIX.md).
 
 ## Install
 
-Puerta (`puertajs`) and Daniela (`danielaz7`) should accept their GitHub collaborator
-invitation to get push access. The repository is public, so cloning/pulling does
-not require an invitation.
+The CSL code repository is public: installing, cloning and pulling it require
+neither a GitHub login nor a collaborator invitation. Private conversation
+exchange access is separate and is only needed for sharing/receiving.
 
 The `csl` command and existing installation paths remain compatible with the
 previous product name. Fresh clones below use `context-session-librarian` as the
 local directory name; use your actual checkout path when updating.
 
-Clone the shared repository, then run:
+Clone the public code repository, then run:
 
 ```bash
 git clone https://github.com/vitral-ai/context-session-librarian.git context-session-librarian
@@ -61,22 +66,30 @@ And writes:
 
 ## Receive A Shared Session
 
-For the private GitHub inbox, install GitHub CLI and connect once per computer:
+Each team chooses its own existing private GitHub repository as an exchange.
+Replace `OWNER/PRIVATE-EXCHANGE` below with that repository, separate from the
+public CSL code repository. Install GitHub CLI, authenticate with your own account,
+and connect once per computer:
 
 ```bash
 gh auth login
-csl team connect warevista/codex-session-exchange
+csl team connect OWNER/PRIVATE-EXCHANGE
 ```
 
-Accept the separate invitation to the private exchange first. Then:
+Your GitHub account needs access to that private exchange; accept its invitation
+if required. Read access permits receiving, and write access is required to share.
+CSL does not create the repository or grant access. With the relevant permission:
 
 ```bash
-csl share <session-uuid> --title "Context for the team"
+csl share SESSION_UUID --title "Context for the team"
 csl inbox
-csl receive csl-xxxxxxxxxxxx --cwd ~/Documents/projects --open
+csl receive csl-SHARE_ID --cwd ~/Documents/projects --open
 ```
 
-Use the ID printed by `share`/`inbox`. Receiving again reuses your existing copy;
+Replace `SESSION_UUID` with a local session ID (use `csl sessions --provider codex`
+or `csl sessions --provider claude` to find one). Replace `csl-SHARE_ID` with the
+actual ID printed by `share`/`inbox`, and use a `--cwd` directory that exists on
+your computer. Receiving again reuses your existing copy;
 `--new` requests an independent copy. Read [SHARING.md](SHARING.md) for details.
 
 For Claude Code, discover and send with:
@@ -133,7 +146,8 @@ cd context-session-librarian
 git pull --ff-only
 ```
 
-No reinstall is needed: `csl` points to this checkout. To contribute code:
+No reinstall is needed: `csl` points to this checkout. To contribute code, use
+your own fork or a checkout where you have write access:
 
 ```bash
 git switch -c feat/my-change
@@ -151,7 +165,7 @@ Search:
 
 ```bash
 csl search "role charter"
-csl search vitral gtm
+csl search deployment database
 ```
 
 Inspect a session:
@@ -176,8 +190,8 @@ Persist durable annotations:
 
 ```bash
 csl annotate 019cf844 \
-  --summary "Vitral GTM strategy thread covering positioning and hiring." \
-  --tags "vitral, gtm, hiring"
+  --summary "Deployment discussion covering database migration." \
+  --tags "deployment, database, migration"
 ```
 
 ## Cut And Clone Workflows
@@ -186,7 +200,7 @@ Safe cut:
 
 ```bash
 csl timeline 019cf844 --width 180
-csl cut 019cf844 --to 14 --name vitral-gtm-before-bilingual-job-docs
+csl cut 019cf844 --to 14 --name before-deployment-changes
 ```
 
 This creates a Markdown context package for a fresh Codex session. It does not modify native Codex session files.
@@ -195,15 +209,17 @@ Experimental native clone:
 
 ```bash
 csl native-cut 019cf844 \
-  --before-text "Yes, provide those 3 documents/artifacts..." \
-  --name "Vitral GTM cut before bilingual job docs"
+  --before-text "New topic starts here" \
+  --name "Earlier deployment discussion"
 ```
 
 This writes a synthetic session into Codex's local session store so it may open with:
 
 ```bash
-codex resume --all <new-session-id>
+codex resume --all NEW_SESSION_UUID
 ```
+
+Replace `NEW_SESSION_UUID` with the ID printed by `native-cut`.
 
 Use `native-cut` only if you explicitly want a resumable cloned session and accept that it depends on Codex's current local session-file behavior.
 
@@ -219,4 +235,5 @@ Read these docs in this order:
 
 - The tool is local-user scoped. Each teammate indexes their own `~/.codex/` data.
 - Updates are simple: pull the repo changes and keep using `csl`.
-- This is an internal operator tool, not a packaged end-user product.
+- Local library and ZIP operations do not require a private exchange or GitHub
+  login. Opening native sessions uses your own native CLI authentication.
