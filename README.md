@@ -11,28 +11,28 @@ including supported tool records, rather than just a summary. See the
 ## Install
 
 Requires Linux and Python 3.11+. The core CLI uses only the Python standard
-library; no virtualenv or pip installation is needed.
+library; no virtualenv or pip installation is needed. Confirm tag availability in
+the [v0.2.2 Release](https://github.com/vitral-ai/context-session-librarian/releases/tag/v0.2.2)
+before using the tagged installation below.
 
 ```bash
-git clone --branch v0.2.1 https://github.com/vitral-ai/context-session-librarian.git context-session-librarian
+git clone --branch v0.2.2 https://github.com/vitral-ai/context-session-librarian.git context-session-librarian
 cd context-session-librarian
 ./install.sh
 csl --version
 ```
 
-Make sure `~/.local/bin` is on `PATH`. **Development:** the installer also prints
+Make sure `~/.local/bin` is on `PATH`. The installer prints
 the installed launcher's version and warns if your shell resolves `csl` to a
 different installation. Keep the checkout: the installed launcher
 points to it. You can choose another installation prefix with `./install.sh PREFIX`.
 Context Session Librarian was previously named Codex Session Librarian; the
 `csl` command and existing installation paths remain compatible.
-Features marked **Development** below belong to this checkout; installing the
-published v0.2.1 tag does not enable them.
 
 Opening a conversation requires its native CLI and your own authentication.
 Local search and ZIP transfers need no GitHub account or paid model calls.
 Team exchange additionally requires [GitHub CLI](https://cli.github.com/).
-For development, clone without `--branch v0.2.1` in a separate directory;
+For development, clone without `--branch v0.2.2` in a separate directory;
 see [release history](CHANGELOG.md) for published changes.
 
 ## Find And Reopen A Conversation
@@ -45,6 +45,7 @@ csl recent --limit 20
 csl recall "database migration"
 csl search database migration
 csl show SESSION_UUID --messages 20 --include-assistant
+csl show SESSION_UUID --tail 10 --include-assistant --reverse
 codex resume --all SESSION_UUID
 ```
 
@@ -54,11 +55,11 @@ The private index may contain sensitive conversation and tool output. Default
 indexing covers active sessions; `index --sessions-dir` can include archives.
 Use `csl cockpit` for an interactive browser.
 
-**Development:** `show` reads the full JSONL history:
+`show` reads the full JSONL history:
 `--tail N` selects the last N messages after role filtering, then `--reverse`
 reverses that selection. Omit `--include-assistant` for user messages only.
 
-**Development:** inspect a copy or fork with `csl why SESSION_UUID WORDS` to
+Inspect a copy or fork with `csl why SESSION_UUID WORDS` to
 include inherited evidence, marked `[inherited]`; `--exclude-inherited`
 shows only evidence created in that session. Global searches exclude inherited
 evidence by default to reduce duplicate copies. For tool output, use words from
@@ -83,7 +84,7 @@ leave originals unchanged. Omit `--open` to import without launching the native 
 
 Export/share performs a **partial secret scan** of readable text. Findings need
 a per-value terminal decision, or explicit `--allow-secrets` / `--scrub-secrets`
-for unattended use. **Development:** interactive `scrub-all` scrubs every detected
+for unattended use. Interactive `scrub-all` scrubs every detected
 value in the current review; replacing earlier `keep` decisions requires
 confirmation. Binary and opaque attachments are not scanned. Review the
 contents before sharing; see [secret review and limits](docs/TRANSFERS.md#partial-secret-review-before-export-or-share).

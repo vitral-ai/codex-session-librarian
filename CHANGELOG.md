@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.2 — 2026-11-11
 
 - Show the installed launcher's version and explain a different `csl` on PATH.
 - Guide team connections toward local sessions to send or an inbox to receive,
