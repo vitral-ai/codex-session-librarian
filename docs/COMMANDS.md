@@ -226,7 +226,16 @@ csl why 019e6eed compact homepage --artifacts
 csl why 019e6eed rubric sliders --turns-only
 ```
 
-Output includes identity details for forked sessions and the exact evidence hits.
+Output includes identity details and indexed evidence hits (up to `--limit`, default 12).
+For a selected session, inherited evidence is included by default and labeled
+`[inherited]`, including in clones, forks and imports. `--exclude-inherited`
+restricts evidence to that session's new activity; `--include-inherited` explicitly
+selects the default. Global search/recall still exclude inherited copies by default
+and preserve their duplicate controls. These filters do not delete source history.
+
+`tool_result` is an evidence category: use `--type tool_result` with words from
+the output. Searching the literal text `tool_result` remains valid but does not
+implicitly select that category.
 
 ### `recent`
 
@@ -291,12 +300,22 @@ Inspect one session in more detail.
 ```bash
 csl show 019d203b
 csl show 019d203b --messages 20 --include-assistant
+csl show 019d203b --tail 10 --include-assistant --reverse
 ```
 
 Flags:
 
-- `--messages`: number of recent user messages to print
-- `--include-assistant`: include recent assistant messages
+- `--messages N`: first N messages after role filtering (default 8)
+- `--tail N`: last N messages after role filtering; mutually exclusive with `--messages`
+- `--include-assistant`: include assistant messages as well as user messages
+- `--reverse`: reverse the selected messages, after choosing the first/last N
+
+N is a positive message count, not a count of exchanges or a separate allowance
+per role. Output uses source-file order, labels roles and original message
+positions, and reports the selected/total count. It reads the complete JSONL,
+not the shortened index cache; unavailable source files fail explicitly. Repeated
+messages are retained. Tool records are not turned into messages or executed.
+`timeline` and cut numbering keep their existing behavior.
 
 ### `related`
 
@@ -410,8 +429,6 @@ Flags:
 - `--before-text`: cut before the first user message containing this text
 - `--name`: thread name for the synthetic cloned session
 - `--new-id`: optional UUID override for the new cloned session
-- `--visibility interactive|agent|archived`: default `interactive`; applies only
-  to this new clone, never the source or an existing session
 
 Behavior:
 
@@ -421,7 +438,9 @@ Behavior:
 - Reindexes the new session into the librarian DB
 - Creates the new file exclusively with permissions `0600`; does not overwrite
   active or archived UUIDs
-- Prints a continuation/recovery command appropriate to the selected visibility
+- Prints a `codex resume` command for the new cut
+
+The following visibility modes apply to `native-clone`, not `native-cut`.
 
 Visibility modes (Codex only, experimental):
 

@@ -117,11 +117,23 @@ class SecretReview:
                 action = "scrub" if self.scrub else "keep"
             else:
                 while True:
-                    print("Choose keep / scrub / cancel: ", end="", file=sys.stderr, flush=True)
+                    print("Choose keep / scrub / scrub-all / cancel: ", end="", file=sys.stderr, flush=True)
                     answer = sys.stdin.readline()
                     if not answer:
                         raise ValueError("Secret review cancelled; no ZIP was created")
                     action = answer.strip().lower()
+                    if action in ("scrub-all", "scrub all", "all"):
+                        kept = sum(value == "keep" for value in self.decisions.values())
+                        print(f"Scrub ALL {len(self.findings)} detected values in this review, including earlier keep decisions; source files stay unchanged. This is not a secret-free guarantee.", file=sys.stderr)
+                        if kept:
+                            print(f"This replaces {kept} earlier keep decision(s). Confirm scrub-all? yes / no: ", end="", file=sys.stderr, flush=True)
+                            confirm = sys.stdin.readline()
+                            if not confirm:
+                                raise ValueError("Secret review cancelled; no ZIP was created")
+                            if confirm.strip().lower() != "yes":
+                                continue
+                        self.decisions = {value: "scrub" for value in self.findings}
+                        return
                     if action in ("keep", "scrub", "cancel"):
                         break
                 if action == "cancel":

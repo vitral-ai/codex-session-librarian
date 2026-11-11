@@ -2,6 +2,44 @@
 
 ## Version records
 
+### v0.2.2 — release candidate
+
+This patch improves finding and inspecting conversations, sharing guidance and
+local secret review without changing provider coverage, native formats, IDs,
+configuration/storage paths or the `csl` command.
+
+- Installation prints the exact installed launcher's version and explains a
+  different `csl` on PATH without running that other launcher.
+- Team connection/status shows local-session and inbox next steps as appropriate
+  to write/read permissions; it does not transfer anything automatically.
+- `why` includes labeled inherited evidence in a selected session by default;
+  global searches retain duplicate controls and explain relevant filters.
+- `show` reads full source history with `--tail` and `--reverse`, role labels and
+  message-count limits. Timeline/cut numbering retains its previous behavior.
+- Interactive `scrub-all` covers all detected values in the current export/share
+  review, confirming replacement of earlier keep decisions. Originals remain
+  unchanged; partial scanning is not a secret-free guarantee.
+- Native cuts are created exclusively with `0600` permissions under a permissive
+  umask; existing files, symlinks and concurrent destinations are not overwritten.
+
+Backup remains experimental, manual and Linux/Codex only; it requires externally
+installed age v1.3.2 and operational/external recovery recipients. Positive
+system-keyring/headless operation is unvalidated. Scheduling, automatic retention
+and historical re-encryption are not included.
+
+The producing CSL version is part of the backup fingerprint. Updating to 0.2.2
+starts a fresh capture instead of reusing objects from another producer version.
+Older checkpoints retain their original fingerprints and recovery-key needs.
+Finish pending backup runs and recipient-change plans using their producing
+version before updating. This patch does not re-encrypt historical backups.
+
+Validation must refer to this candidate's own fixed SHA, including native/media/
+migration opt-ins and isolated installation/demo. Earlier candidate results remain
+attached to their own commits. Publication is established by the
+[v0.2.2 Release](https://github.com/vitral-ai/context-session-librarian/releases/tag/v0.2.2)
+and its exact tag, not by this preparation record. Historical v0.2.1 and earlier
+tags and notes remain unchanged.
+
 ### v0.2.1 — release candidate
 
 This patch release adopts the visible name **Context Session Librarian (CSL)**

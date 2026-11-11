@@ -155,8 +155,15 @@ readable strings in the output snapshot, session titles/cwd, output destination
 and an explicit share title. It recognizes private-key blocks, selected GitHub,
 API and Slack token formats, credential assignments/fields and URL passwords.
 Findings show a type, numeric location and masked value, never the secret or a
-snippet. In a terminal, choose `keep`, `scrub` or `cancel` for each distinct value;
+snippet. In a terminal, choose `keep`, `scrub`, `scrub-all` or `cancel`;
 the decision applies to repeated occurrences across the package and share metadata.
+`scrub-all` means all detected values in this review, including earlier `keep`
+decisions, repeated occurrences, titles and share metadata. If earlier values were
+kept, CSL explains that change and requires `yes` confirmation; declining returns
+to the current value without changing prior decisions. End-of-input cancels without
+publishing a ZIP or share. This choice does not apply to future exports. Originals
+remain unchanged, and the output manifest/checksums describe the scrubbed bytes.
+It does not guarantee the absence of undetected or opaque secrets.
 No findings means no review questions.
 
 For unattended use, findings stop the operation without waiting for input. Choose

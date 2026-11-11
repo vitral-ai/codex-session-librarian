@@ -103,10 +103,17 @@ def team_command(args, csl):
         repo, permission = verify_repo(args.repo)
         save_json(state_dir(csl) / "config.json", {"version": 1, "repo": repo})
     else:
-        repo = configured_repo(csl)
-        permission = "available"
+        config = read_json(state_dir(csl) / "config.json", {})
+        if not config.get("repo"):
+            raise TransferError("Connect first: csl team connect OWNER/PRIVATE-REPO")
+        repo, permission = verify_repo(config["repo"])
     print(f"team: https://github.com/{repo} (private; {permission})")
-    print("next: csl share UUID --title 'Conversation title'")
+    if permission in ("ADMIN", "MAINTAIN", "WRITE"):
+        print("Send: csl sessions --provider codex  # choose a local UUID, then csl share UUID")
+        print("If the Codex list is empty or outdated: csl index")
+    else:
+        print("Read-only access: receiving is available; sharing requires write access.")
+    print("Receive: csl inbox  # then csl receive SHARE_ID --cwd /existing/project")
 
 
 def file_sha256(path):

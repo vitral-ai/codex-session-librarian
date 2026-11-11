@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.2.2 — 2026-11-11
+
+- Show the installed launcher's version and explain a different `csl` on PATH.
+- Guide team connections toward local sessions to send or an inbox to receive,
+  respecting read-only access without automatic transfers.
+- Include labeled inherited evidence by default in `why` for a selected session;
+  retain global search duplicate controls and explain relevant filters.
+- Read full source history in `show`, with `--tail` and `--reverse`, chronological
+  role labels and a message-count limit instead of shortened index snippets.
+- Offer interactive `scrub-all` across the current export/share review, requiring
+  confirmation before replacing earlier keep decisions; preserve original files.
+- Create native cuts exclusively with private `0600` permissions, including under
+  a permissive umask; refuse existing files, symlinks and concurrent destinations.
+
 ## 0.2.1 — 2026-11-10
 
 - Rename the visible product to Context Session Librarian (CSL), retaining the
