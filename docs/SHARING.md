@@ -165,7 +165,12 @@ Configuration is stored in `$CODEX_HOME/csl-sharing/config.json` with `0600`
 permissions. It contains the repository name, not a token. GitHub CLI handles its
 own authentication. CSL checks visibility on every operation and refuses public
 repositories, including a formerly private repository whose visibility changed.
-Read access suffices for receiving; publishing requires write access.
+Read access suffices for receiving; publishing requires write access. Connection
+and status output offer the relevant next steps without sending or receiving
+anything automatically: with write access, `csl sessions --provider codex` lists
+local UUIDs to send (run `csl index` if empty/outdated); `csl inbox` lists shared
+packages to receive. Read-only connections show receiving guidance, not a share
+command. `sessions --query` filters names/UUIDs; use `search`/`recall` for content.
 
 ## Share
 

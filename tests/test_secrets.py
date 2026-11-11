@@ -233,8 +233,69 @@ class SecretExportTests(unittest.TestCase):
         _, native = self.contents(bundle)
         self.assertNotIn(b'bare-password-value', native)
         self.assertIn(OTHER.encode(), native)
-        self.assertEqual(self.err.getvalue().count('Choose keep / scrub / cancel:'), 2)
+        self.assertEqual(self.err.getvalue().count('Choose keep / scrub / scrub-all / cancel:'), 2)
         self.assert_masked()
+
+    def test_scrub_all_replaces_prior_keep_and_covers_both_native_providers(self):
+        for provider in ('codex', 'claude'):
+            source, header = self.fixture(provider, title=OTHER)
+            original = source.read_bytes()
+            bundle = self.export(source, header, terminal=Terminal('keep\nscrub-all\nyes\n'))
+            manifest, native = self.contents(bundle)
+            outgoing = json.dumps(manifest).encode() + native
+            self.assertNotIn(TOKEN.encode(), outgoing)
+            self.assertNotIn(OTHER.encode(), outgoing)
+            self.assertIn('earlier keep', self.err.getvalue())
+            self.assertIn('Confirm scrub-all?', self.err.getvalue())
+            self.assertEqual(source.read_bytes(), original)
+            self.assert_masked()
+            canonical.read_jsonl(source)  # Source remains valid and untouched.
+
+    def test_scrub_all_decline_retains_prior_decisions_and_eof_cancels(self):
+        for answer, expected in [('keep\nscrub-all\nno\nkeep\nkeep\n', 'keep'),
+                                  ('keep\nscrub-all\nyes\n', 'scrub')]:
+            review = secrets.SecretReview(SimpleNamespace())
+            review.scan({'api_key': TOKEN, 'password': OTHER, 'client_secret': 'synthetic-third-password'}, 'synthetic')
+            with patch('sys.stdin', Terminal(answer)), patch('sys.stderr', io.StringIO()):
+                review.resolve()
+            self.assertEqual(set(review.decisions.values()), {expected})
+            self.assertEqual(len(review.decisions), 3)
+        source, header = self.fixture('codex', title=OTHER)
+        before = source.read_bytes()
+        with self.assertRaisesRegex(ValueError, 'cancelled'):
+            self.export(source, header, terminal=Terminal('keep\nscrub-all\n'))
+        self.assertFalse(list(self.root.rglob('*.zip')))
+        self.assertEqual(source.read_bytes(), before)
+
+    def test_interactive_scrub_all_share_metadata_and_zip_no_upload_before_confirmation(self):
+        for confirmed in (True, False):
+            source, header = self.fixture('codex', title=OTHER)
+            before = source.read_bytes()
+            args = SimpleNamespace(sessions=[str(source)], db=self.root/'index.sqlite', raw=False,
+                title='Handoff '+OTHER, provider=None, scrub_secrets=False, allow_secrets=False)
+            uploaded = []
+            def upload(command):
+                with zipfile.ZipFile(command[3]) as archive:
+                    manifest = transfer.inspect_bundle(archive)
+                    contents = b''.join(archive.read(name) for name in archive.namelist())
+                notes = Path(command[command.index('--notes-file')+1]).read_bytes()
+                self.assertNotIn(TOKEN.encode(), contents+notes)
+                self.assertNotIn(OTHER.encode(), contents+notes)
+                uploaded.append(command)
+                return ''
+            with patch.object(sharing, 'configured_repo', return_value='synthetic/private'), \
+                 patch.object(sharing, 'run_gh', side_effect=upload), \
+                 patch.object(transfer, 'resolve_sources', return_value=[(source, header)]), \
+                 patch('sys.stdin', Terminal('keep\nscrub-all\n'+('yes\n' if confirmed else ''))), \
+                 patch('sys.stdout', io.StringIO()), patch('sys.stderr', io.StringIO()):
+                if confirmed:
+                    sharing.share(args, self.csl)
+                    self.assertEqual(len(uploaded), 1)
+                else:
+                    with self.assertRaisesRegex(ValueError, 'cancelled'):
+                        sharing.share(args, self.csl)
+                    self.assertEqual(uploaded, [])
+            self.assertEqual(source.read_bytes(), before)
 
     def test_no_findings_adds_no_prompt(self):
         source, header = self.fixture('codex', token='ordinary text')

@@ -982,6 +982,7 @@ def recall_sessions(args: argparse.Namespace) -> None:
         candidates.append(candidate)
 
     if not candidates:
+        evidence_filter_note(args)
         print("No recall candidates found in indexed sessions.")
         print("Tried fuzzy clues: " + (", ".join(match_terms) if match_terms else "(none)"))
         print_pinpoint_questions(match_terms, repo=None, no_results=True)
@@ -1389,18 +1390,48 @@ def print_session_row(
                 if hit["line_no"] is not None:
                     location.append(f"line {hit['line_no']}")
                 suffix = f" ({', '.join(location)})" if location else ""
-                print(f"    [{hit['hit_type']}]{suffix} {one_line(hit['text'], 180)}")
+                inherited = " [inherited]" if hit["is_inherited"] else ""
+                print(f"    [{hit['hit_type']}]{inherited}{suffix} {one_line(hit['text'], 180)}")
     print()
+
+
+def evidence_filter_note(args: argparse.Namespace) -> None:
+    if not args.include_inherited:
+        print("Global results exclude inherited evidence to avoid fork/copy duplicates. "
+              "Inspect a copy with csl why UUID QUERY, or use --include-inherited globally.")
+    if "tool_result" in getattr(args, "query", []):
+        print("If you meant the evidence category, use --type tool_result with words from the result; the query itself is still literal.")
+
+
+def hidden_evidence_exists(conn: sqlite3.Connection, args: argparse.Namespace) -> bool:
+    where = ["coalesce(h.is_inherited, 0) = 1"]
+    params: list[Any] = []
+    types = hit_type_filter(args)
+    if types:
+        where.append(f"h.hit_type IN ({', '.join('?' for _ in types)})")
+        params.extend(types)
+    for term in getattr(args, "query", []):
+        where.append("lower(h.text || ' ' || coalesce(h.detail,'')) LIKE ?")
+        params.append(f"%{term.lower()}%")
+    if getattr(args, "project", None):
+        where.append("lower(s.project) = lower(?)")
+        params.append(args.project)
+    if getattr(args, "forks", False):
+        where.append("s.has_fork_hint = 1")
+    return conn.execute(f"SELECT 1 FROM session_hits h JOIN sessions s ON s.path=h.session_path WHERE {' AND '.join(where)} LIMIT 1", params).fetchone() is not None
 
 
 def search_sessions(args: argparse.Namespace) -> None:
     rows = query_sessions(args)
     if not rows:
-        print("No matching sessions. Run `./codex_sessions.py index` if the index is stale.")
+        evidence_filter_note(args)
+        print("No matching sessions. Check query/type filters; run `csl index` if files are new or changed.")
         return
     conn = init_db(args.db.expanduser())
     terms = [term for term in getattr(args, "query", []) if term.strip()]
     types = hit_type_filter(args)
+    if args.show_hits and not args.include_inherited and hidden_evidence_exists(conn, args):
+        evidence_filter_note(args)
     seen_evidence: set[tuple[str, str]] = set()
     for row in rows:
         if types and not getattr(args, "no_dedupe", False):
@@ -1435,14 +1466,26 @@ def show_session(args: argparse.Namespace) -> None:
         print(f"No session matched: {args.session}", file=sys.stderr)
         raise SystemExit(1)
     print_session_row(row, verbose=True)
-    if row["user_messages"]:
-        print("User messages:")
-        for msg in row["user_messages"].split("\n---\n")[: args.messages]:
-            print(f"- {msg}")
-    if row["assistant_messages"] and args.include_assistant:
-        print("\nAssistant messages:")
-        for msg in row["assistant_messages"].split("\n---\n")[: args.messages]:
-            print(f"- {msg}")
+    count = args.tail if getattr(args, "tail", None) is not None else args.messages
+    if count <= 0:
+        print("Message count must be positive.", file=sys.stderr)
+        raise SystemExit(2)
+    try:
+        messages = session_messages(Path(row["path"]), preserve_repeats=True)
+    except OSError as exc:
+        print(f"Cannot read full conversation: {exc}", file=sys.stderr)
+        raise SystemExit(1) from None
+    selected = [(i, message) for i, message in enumerate(messages, 1)
+                if args.include_assistant or message["role"] == "user"]
+    total = len(selected)
+    selected = selected[-count:] if getattr(args, "tail", None) is not None else selected[:count]
+    if getattr(args, "reverse", False):
+        selected.reverse()
+    roles = "user + assistant" if args.include_assistant else "user only"
+    order = "reverse source order" if getattr(args, "reverse", False) else "source order"
+    print(f"Messages: showing {len(selected)} of {total} ({roles}; {order}; limit counts messages)")
+    for number, message in selected:
+        print(f"\n{number:03d} {message['role']}: {message['text']}")
 
 
 def related_sessions(args: argparse.Namespace) -> None:
@@ -1835,10 +1878,15 @@ def why_session(args: argparse.Namespace) -> None:
     )
     if not hits:
         print("No matching indexed evidence hits for this session.")
+        if not args.include_inherited and matching_hits(conn, row["path"], terms, types=types or None, limit=1, include_inherited=True):
+            print("Inherited matches were hidden by --exclude-inherited; omit it to inspect this session's full evidence.")
+        if "tool_result" in terms:
+            print("If you meant the evidence category, use --type tool_result with words from the result; the query itself is still literal.")
         return
     print("Evidence:")
     for hit in hits:
-        print(f"- [{hit['hit_type']}] line={hit['line_no']} turn={hit['turn_index']} {one_line(hit['text'], args.width)}")
+        inherited = " [inherited]" if hit["is_inherited"] else ""
+        print(f"- [{hit['hit_type']}]{inherited} line={hit['line_no']} turn={hit['turn_index']} {one_line(hit['text'], args.width)}")
 
 
 def stats(args: argparse.Namespace) -> None:
@@ -1993,7 +2041,7 @@ def compact_block(text: str, limit: int) -> str:
     return text[: limit - 1].rstrip() + "..."
 
 
-def session_messages(path: Path) -> list[dict[str, str]]:
+def session_messages(path: Path, *, preserve_repeats: bool = False) -> list[dict[str, str]]:
     messages: list[dict[str, str]] = []
     with path.open("r", encoding="utf-8", errors="replace") as fh:
         for line in fh:
@@ -2012,7 +2060,7 @@ def session_messages(path: Path) -> list[dict[str, str]]:
             text = extract_text_from_content(payload.get("content"))
             if not text or (role == "user" and is_noise_user_text(text)):
                 continue
-            if messages and messages[-1]["role"] == role and messages[-1]["text"].strip() == text.strip():
+            if not preserve_repeats and messages and messages[-1]["role"] == role and messages[-1]["text"].strip() == text.strip():
                 continue
             messages.append({"role": str(role), "text": text.strip()})
     return messages
@@ -2274,7 +2322,9 @@ def native_cut_session(args: argparse.Namespace) -> None:
     output_lines: list[str] = []
     for line in original_lines[:cutoff]:
         output_lines.append(rewrite_session_meta(line, new_id, source_id, now))
-    target_path.write_text("".join(output_lines), encoding="utf-8")
+    descriptor = os.open(target_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(descriptor, "w", encoding="utf-8") as output:
+        output.write("".join(output_lines))
     register_native_session(conn, target_path, new_id, args.name, now)
 
     print(f"created native cut session: {new_id}")
@@ -2922,7 +2972,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_show = sub.add_parser("show", help="Show one session in more detail.")
     p_show.add_argument("session", help="Session id, path fragment, or thread name fragment.")
-    p_show.add_argument("--messages", type=int, default=8)
+    show_count = p_show.add_mutually_exclusive_group()
+    show_count.add_argument("--messages", type=int, default=8, help="First N messages after role filtering (default: 8).")
+    show_count.add_argument("--tail", type=int, help="Last N messages after role filtering, selected before --reverse.")
+    p_show.add_argument("--reverse", action="store_true", help="Reverse selected messages; does not change selection.")
     p_show.add_argument("--include-assistant", action="store_true")
     p_show.set_defaults(func=show_session)
 
@@ -3011,7 +3064,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_why.add_argument("query", nargs="*", help="Evidence query terms.")
     p_why.add_argument("--limit", type=int, default=12)
     p_why.add_argument("--width", type=int, default=240)
-    p_why.add_argument("--include-inherited", action="store_true", help="Include evidence inherited from fork ancestors.")
+    why_inherited = p_why.add_mutually_exclusive_group()
+    why_inherited.add_argument("--include-inherited", dest="include_inherited", action="store_true", default=True, help="Include inherited evidence (default for a selected session).")
+    why_inherited.add_argument("--exclude-inherited", dest="include_inherited", action="store_false", help="Only evidence created in this session.")
     p_why.add_argument("--turns-only", action="store_true", help="Show only real user/assistant turns.")
     p_why.add_argument("--artifacts", action="store_true", help="Show only commands, commits, patches, and files.")
     p_why.add_argument(
