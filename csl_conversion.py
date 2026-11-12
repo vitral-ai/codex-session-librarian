@@ -8,7 +8,7 @@ import uuid
 import zipfile
 
 import csl_canonical as canonical
-from csl_diagnostics import analyze, apply_budget
+from csl_diagnostics import analyze, apply_budget, conversion_observation, print_conservation
 
 
 def canonical_input(source, provider=None, *, leaf=None, history_policy="active", repair_interrupted=False):
@@ -42,7 +42,7 @@ def convert_bundle(args, csl, archive, manifest):
     if getattr(args, "leaf", None) and len(manifest["sessions"]) != 1:
         raise ValueError("--leaf requires a single-session package")
     with tempfile.TemporaryDirectory(prefix="csl-cross-import-") as temp:
-        paths = []
+        paths, conservation = [], []
         for entry in manifest["sessions"]:
             if entry.get("compaction_state_removed") and getattr(args, "history_policy", "active") == "active":
                 raise ValueError("Package lost encrypted compaction state; exact conversion is unavailable. Select --history-policy visible only for explicit readable-history recovery")
@@ -58,16 +58,19 @@ def convert_bundle(args, csl, archive, manifest):
             if detect_provider(source) != provider:
                 raise ValueError("Native source format differs from the package provider")
             converted = Path(temp) / f"converted-{uuid.uuid4()}.jsonl"
-            convert_native(source, provider, target, converted, args.cwd, args)
+            observation = {}
+            convert_native(source, provider, target, converted, args.cwd, args, observation=observation)
+            conservation.append(observation)
             paths.append(str(converted))
         bundle = export_bundle(SimpleNamespace(sessions=paths, provider=target, raw=False,
                                                to=Path(temp) / "converted.zip", db=args.db), csl, quiet=True, scan_secrets=False)
         options = dict(vars(args), bundle=bundle, provider=target, target=None,
-                       leaf=None, history_policy="active", repair_interrupted=False)
+                       leaf=None, history_policy="active", repair_interrupted=False,
+                       _conversion_conservation=conservation)
         return import_bundle(SimpleNamespace(**options), csl)
 
 
-def convert_native(source, provider, target, path, cwd, args):
+def convert_native(source, provider, target, path, cwd, args, *, observation=None):
     data = canonical_input(source, provider, leaf=getattr(args, "leaf", None),
                            history_policy=getattr(args, "history_policy", "active"),
                            repair_interrupted=getattr(args, "repair_interrupted", False))
@@ -75,15 +78,17 @@ def convert_native(source, provider, target, path, cwd, args):
     print(f"converted: {provider} -> {target}; canonical v{canonical.VERSION}; "
           f"events={len(data['events'])}; source policy records quarantined={len(data['source_context'])}")
     conversion_notice(data)
+    if observation is not None:
+        observation.update(conversion_observation(data))
     return info
 
 
 def conversion_notice(data):
     ignored = data.get("report", {}).get("ignored_native_state", {})
     if ignored:
-        print("conversion native-state report: " + json.dumps(ignored, sort_keys=True))
-    for warning in data.get("report", {}).get("warnings", []):
-        print("conversion warning: " + json.dumps(warning, ensure_ascii=True))
+        print("conversion native-state report: selection/omission counts recorded in conversion provenance")
+    if data.get("report", {}).get("warnings"):
+        print("conversion warning: content/projection warnings recorded; inspect the canonical report")
     if data.get("report", {}).get("history_policy") == "visible":
         print("WARNING: explicit visible-history recovery; not exact compacted context restoration")
     repaired = data.get("report", {}).get("synthetic_interruption_results", [])
@@ -110,6 +115,7 @@ def convert(args, csl):
                 raise ValueError("Explicit canonical context character limit exceeded")
         canonical.write_json(args.out.expanduser(), data)
         print(f"canonical: {args.out.expanduser().resolve()} (v{canonical.VERSION}, {len(data['events'])} events)")
+        print_conservation({"structure": "passed"}, {}, provider="canonical", conversion=conversion_observation(data))
         return
     if args.out:
         raise ValueError("--out is for canonical JSON; native targets install a fresh session under --cwd")
@@ -124,7 +130,8 @@ def convert(args, csl):
                                                to=Path(temp) / "converted.zip", db=args.db), csl, quiet=True, scan_secrets=False)
         return import_bundle(SimpleNamespace(bundle=bundle, cwd=cwd, name=args.name, list=False,
             open=args.open, open_args=args.open_args, provider=args.to, db=args.db,
-            max_context_chars=args.max_context_chars), csl)
+            max_context_chars=args.max_context_chars,
+            _conversion_conservation=[conversion_observation(data)]), csl)
 
 
 def doctor(args, csl):
@@ -223,11 +230,11 @@ def add_commands(subparsers, csl):
             import sys
             print(f"csl {args.command}: {exc}", file=sys.stderr)
             raise SystemExit(2) from None
-    conversion = subparsers.add_parser("convert", help="Convert native/canonical conversations into a new native session or canonical JSON.")
+    conversion = subparsers.add_parser("convert", help="Create an independent conversation copy (new UUID) or canonical JSON; not a synchronized migration.")
     conversion.add_argument("session")
     conversion.add_argument("--provider", choices=("codex", "claude"), help="Optional source filter; normally auto-detected.")
     conversion.add_argument("--to", choices=("codex", "claude", "canonical"), required=True)
-    conversion.add_argument("--out", type=Path, help="Destination for canonical JSON; existing files are never overwritten.")
+    conversion.add_argument("--out", type=Path, help="Destination for canonical JSON (no session installed); existing files are never overwritten.")
     conversion.add_argument("--cwd", type=Path, default=Path.cwd())
     conversion.add_argument("--name")
     add_conversion_options(conversion, target=False)

@@ -104,6 +104,23 @@ class SharingTests(unittest.TestCase):
     def imports(self):
         return [p for p in (self.home / "sessions").rglob("*.jsonl") if self.sid not in p.name]
 
+    def test_conservation_summary_for_fresh_and_receipt_reused_copy(self):
+        tag=self.publish()
+        ids=self.receive(tag)
+        fresh=self.output.getvalue()
+        self.assertIn("independent codex copy",fresh)
+        self.assertIn("Conservation (selected history",fresh)
+        count=len(self.imports())
+        self.assertEqual(self.receive(tag),ids)
+        reused=self.output.getvalue()
+        self.assertIn("reused codex copy",reused)
+        self.assertIn("Earlier transfer fidelity not reassessed",reused)
+        self.assertNotIn("independent codex copy",reused)
+        self.assertEqual(len(self.imports()),count)
+        new=self.receive(tag,"--new")
+        self.assertNotEqual(new,ids)
+        self.assertIn("independent codex copy",self.output.getvalue())
+
     def test_connect_private_and_reject_public(self):
         self.connect()
         config = sharing.state_dir(csl) / "config.json"

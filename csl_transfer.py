@@ -596,7 +596,7 @@ def import_bundle(args, csl):
             raise TransferError("--open with multiple sessions needs an interactive terminal; import without --open")
         if args.name and len(entries) != 1:
             raise TransferError("--name requires a single-session bundle")
-        staged = []
+        staged, conservation = [], {}
         # Validate every member, checksum and replay before installing any session.
         for entry in entries:
             sid = str(uuid.uuid4())
@@ -655,7 +655,10 @@ def import_bundle(args, csl):
             if source_bases:
                 print("Note: source fork references an inherited parent history; this import includes only the records present in this package, not missing parent files.")
             from csl_diagnostics import preflight
-            preflight(local, provider, max_context_chars=getattr(args, "max_context_chars", None))
+            observation = {}
+            report = preflight(local, provider, max_context_chars=getattr(args, "max_context_chars", None), observation=observation)
+            conversion = getattr(args, "_conversion_conservation", None)
+            conservation[sid] = (report, observation, conversion[len(staged) - 1] if conversion else None)
         if args.list:
             print("Package validated; no sessions installed.")
             return
@@ -670,6 +673,10 @@ def import_bundle(args, csl):
                 if provider == "codex":
                     csl.register_native_session(conn, target, sid, title, now)
                 print(f"imported: {sid} (source: {entry['id']})")
+                from csl_diagnostics import print_conservation
+                report, observation, conversion = conservation[sid]
+                print_conservation(report, observation, provider=provider, session_id=sid,
+                                   conversion=conversion, entry=entry)
                 command = shlex.join(resume_command(sid, cwd, getattr(args, 'open_args', ()), provider))
                 print(f"open: {'cd ' + shlex.quote(str(cwd)) + ' && ' if provider == 'claude' else ''}{command}")
         except BaseException:
@@ -727,7 +734,7 @@ def add_commands(subparsers, csl):
     from csl_secrets import add_options
     add_options(export)
     export.set_defaults(func=lambda args: run_transfer(args, csl))
-    imp = subparsers.add_parser("import", help="Validate and install a session bundle with fresh local UUIDs.")
+    imp = subparsers.add_parser("import", help="Validate a bundle or install independent copies with fresh UUIDs; direct reimports create more copies.")
     imp.add_argument("bundle", type=Path)
     imp.add_argument("--cwd", type=Path, default=Path.cwd(), help="Local project directory (default: current directory).")
     mode = imp.add_mutually_exclusive_group()

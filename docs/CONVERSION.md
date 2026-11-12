@@ -21,11 +21,18 @@ Sources are auto-detected. `--provider` restricts/asserts the source;
 Without a target, existing native transfers stay native. All CSL options must
 precede `--open`; subsequent arguments belong to the destination CLI.
 
-Every conversion installs a new UUID and leaves originals unchanged. A converted
-receive has its own receipt keyed by destination, history selection and repair
-options; it never reuses the native copy by mistake. Repeat that same route to
-reuse its copy, or use `--new` for another one. Source share ancestry is retained
-when the converted session is later shared back.
+Standalone `convert` and direct `import` (including `--target`) install new UUIDs
+on every successful invocation and leave originals unchanged. Open the printed
+**destination UUID**, not the source UUID. These are independent copies, not a
+synchronized migration. `import --list` installs nothing; canonical export only
+writes JSON.
+
+A converted `receive` has its own receipt keyed by destination, history selection
+and repair options; it never reuses the native copy by mistake. Repeat that same
+share snapshot/route to reuse the local copy, or use `--new` for another one.
+Source share ancestry is retained when the converted session is later shared back.
+This does not change the separate computer-migration/cleanup contract.
+See [native import versus CSL](NATIVE_IMPORT_COMPARISON.md) to choose a route.
 
 Canonical JSON can be transferred privately and restored without the source CLI:
 
@@ -38,6 +45,40 @@ Canonical outputs are private `0600` files and cannot overwrite existing files.
 The [v2 JSON Schema](canonical-v2.schema.json) describes the multimodal profile.
 Canonical JSON is not itself a `.csl.zip` or GitHub release asset; use native
 share/receive with `--target`, or transfer that JSON privately and use convert.
+
+## Reading The Conservation Summary
+
+The development checkout adds a human-only summary after successful conversion
+or session installation; the published v0.2.2 output predates it. Machine-readable
+`doctor --json`, canonical JSON and transfer formats keep their existing schema.
+
+- **Present:** recognized text/media message records and structured tool pairs
+  matched by ID in the selected history. Text that merely describes a tool is
+  never counted as structured correlation. Error-flag counts include any explicitly
+  marked repair results. These counts are not proof of full source equivalence.
+- **Transformed/omitted:** canonical/native normalization, source policy quarantined
+  instead of replayed as authority, known selection/state changes, and portable
+  package losses where recorded. UNKNOWN interruption repair and visible-history
+  recovery remain explicit; unavailable hidden state is not invented.
+- **Validation:** structural inspection is separate from loading in a native CLI
+  and model continuation. Ordinary import/conversion has not run those latter
+  checks, even if picker metadata refreshed successfully.
+
+Counts reuse the canonical report or continuity preflight's already loaded items;
+there is no additional transcript-file pass for this summary. A missing/limited
+analysis is reported as not assessed. Canonical export's detail is in its existing
+`report`/`source_context`; converted native files also embed `csl_conversion`
+provenance counts. For installed copies, `csl doctor UUID --json` inspects
+current destination structure and context, not complete source equivalence.
+No message bodies, tool arguments/results, private paths or tool IDs are printed
+by the summary.
+
+Fresh receive uses the import summary. Receipt reuse reports the current local
+copy and no new identity, without inheriting an old transfer's preservation claim.
+Export/share have no equivalent full continuity/canonical report, so they retain
+the existing package/portable-removal and partial-secret-review information instead
+of adding a speculative preservation summary. `import --list` validates a package
+without claiming an installed session. Backup is a separate feature/contract.
 
 ## Profile And Fail-Closed Behavior
 

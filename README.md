@@ -8,6 +8,19 @@ experimental conversion between the two CLIs. It works with conversation history
 including supported tool records, rather than just a summary. See the
 [command and compatibility matrix](docs/PROVIDER_MATRIX.md) for exact coverage.
 
+## When To Use CSL
+
+- Find decisions and tool-output evidence in indexed Codex history.
+- Create an independent continuation, or trim a copy before a different task.
+- Share an inspectable conversation snapshot using ZIPs or a private exchange.
+
+For recent Claude Code chats moving to Codex on the same machine, the
+[native import workflow](https://learn.chatgpt.com/docs/import) may be enough.
+Claude's documented Codex import is for
+[configuration](https://code.claude.com/docs/en/commands), not a symmetric chat
+import. See [native import or CSL?](docs/NATIVE_IMPORT_COMPARISON.md) for a dated,
+reproducible comparison and the distinction between migration and a new copy.
+
 ## Install
 
 Requires Linux and Python 3.11+. The core CLI uses only the Python standard
@@ -143,6 +156,11 @@ Conversion is explicit and **experimental**:
 csl convert SESSION_UUID --to claude --cwd ~/work/project
 csl receive csl-SHARE_ID --target codex --cwd ~/work/project
 ```
+
+**Development checkout:** successful conversion/import also prints a brief
+conservation summary: recognized messages/tool relationships, known transformations
+and omissions, and the validation actually reached. It is not included in the
+published v0.2.2 tag. [Read the summary and copy semantics](docs/CONVERSION.md#reading-the-conservation-summary).
 
 The supported profile includes text, completed tools, references, embedded images
 and PDFs. Unsupported assets and opaque context are rejected rather than silently

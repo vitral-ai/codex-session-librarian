@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- Add use-case guidance and a dated, reproducible native-import comparison,
+  distinguishing configuration migration from conversation copies and packages.
+- Summarize recognized content, known transformations/state omissions and actual
+  structural validation after conversion/import, without changing JSON schemas.
+- Clarify new destination UUIDs versus receipt-based receive reuse; preserve
+  existing copy, migration and cleanup semantics.
+
 ## 0.2.2 — 2026-11-11
 
 - Show the installed launcher's version and explain a different `csl` on PATH.
