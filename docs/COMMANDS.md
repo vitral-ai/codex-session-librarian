@@ -16,7 +16,8 @@ isolated histories, not your personal sessions. It requires explicit budgets and
 test credentials; see [live verification](LIVE_VERIFICATION.md) for setup,
 flags, measured coverage and limitations. Ordinary `doctor` remains model-free.
 
-This is an LLM-native operator tool: the commands are designed so an assistant can inspect, summarize, trim, and reopen Codex sessions efficiently.
+Use these commands from a terminal or coding assistant to inspect, summarize,
+trim and reopen conversations within the provider coverage above.
 
 This project has two layers:
 
@@ -84,7 +85,7 @@ Search by topic, files, tags, thread name, messages, or commands.
 ```bash
 csl search mongo
 csl search "role charter"
-csl search vitral gtm --project vitral
+csl search deployment database --project example-project
 csl search --forks
 csl search rubric sliders --turns-only --show-hits
 csl search syntheval homepage --artifacts --show-hits
@@ -137,7 +138,7 @@ Flags:
 Assertively locate the most likely conversation when the memory is fuzzy.
 
 ```bash
-csl pinpoint mongo 8.2 GLIBC_TUNABLES deployment.yaml --repo vitral_backend
+csl pinpoint mongo 8.2 GLIBC_TUNABLES deployment.yaml --repo example_backend
 csl pinpoint syntheval homepage rubric sliders --repo syntheval_front --ask
 csl pinpoint --file k8s/mongodb/deployment.yaml SHSTK mongo
 ```
@@ -199,7 +200,7 @@ Search only indexed `apply_patch` edits.
 
 ```bash
 csl patches --file k8s/mongodb/deployment.yaml --contains GLIBC_TUNABLES
-csl patches mongo:8.2 --repo vitral_backend
+csl patches mongo:8.2 --repo example_backend
 csl patches --session 019ddfeb --file deployment.yaml 8.2
 ```
 
@@ -243,7 +244,7 @@ Show recently updated indexed sessions.
 
 ```bash
 csl recent --limit 20
-csl recent --project vitral
+csl recent --project example-project
 csl recent --forks
 ```
 
@@ -395,7 +396,7 @@ Flags:
 Create a safe cut package for a fresh session.
 
 ```bash
-csl cut 019cf844 --to 14 --name vitral-gtm-before-candidates \
+csl cut 019cf844 --to 14 --name before-deployment-changes \
   --next-prompt "Continue from this point and focus only on GTM strategy."
 ```
 
@@ -421,7 +422,7 @@ Create an experimental native trimmed clone that may open with `codex resume`.
 ```bash
 csl native-cut 019cf844 \
   --before-text "Yes, provide those 3 documents/artifacts..." \
-  --name "Vitral GTM cut before bilingual job docs"
+  --name "Earlier deployment discussion"
 ```
 
 Flags:
@@ -485,15 +486,24 @@ Run them with `CSL_RUN_CODEX_NATIVE_TESTS=1 python3 -m unittest discover -s test
 
 ### `export` And `import`
 
-For automatic private GitHub transfer, use:
+For private GitHub transfer, each team connects its own existing exchange.
+Replace `OWNER/PRIVATE-EXCHANGE` with that private repository. Installing CSL from
+the public code repository requires no invitation; sharing/receiving requires
+your own GitHub authentication and access to the private exchange. Read access
+permits receiving; publishing requires write access. No repository or permission
+is created automatically.
+
+With the appropriate access, use:
 
 ```bash
-csl team connect warevista/codex-session-exchange
-csl share <uuid> --title "Team context"
+csl team connect OWNER/PRIVATE-EXCHANGE
+csl share SESSION_UUID --title "Team context"
 csl inbox --json
-csl receive csl-xxxxxxxxxxxx --cwd ~/Documents/projects --open
+csl receive csl-SHARE_ID --cwd ~/Documents/projects --open
 ```
 
+Use a real local session ID for `SESSION_UUID` and the ID printed by `share` or
+`inbox` for `csl-SHARE_ID`; the `--cwd` directory must exist locally.
 `team status` checks the connection. `share` supports several selectors and
 `--raw`. `inbox --limit N` bounds the metadata listing. `receive --new` makes a
 fresh copy instead of reusing an existing import. See [SHARING.md](SHARING.md).
@@ -502,8 +512,8 @@ Transfer native conversation history between teammates without transferring thei
 accounts or local Codex databases:
 
 ```bash
-csl export <uuid> --to ~/Downloads
-csl export <uuid> <another-uuid> --to ~/Downloads/handoff.csl.zip
+csl export SESSION_UUID --to ~/Downloads
+csl export SESSION_UUID ANOTHER_SESSION_UUID --to ~/Downloads/handoff.csl.zip
 csl import ~/Downloads/handoff.csl.zip --list
 csl import ~/Downloads/handoff.csl.zip --cwd ~/Documents/projects --open
 ```
@@ -517,7 +527,7 @@ Create an experimental full native clone that may open with `codex resume`.
 
 ```bash
 csl native-clone 019cf844 \
-  --name "Vitral GTM full clone"
+  --name "Independent continuation"
 ```
 
 Flags:

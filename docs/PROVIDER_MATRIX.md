@@ -66,12 +66,19 @@ archives/non-interactive sources and does not migrate project files or accounts.
 `migrate cleanup` previews by default and archives unchanged originals only with
 `--confirm-restored`; it never deletes files. See [migration](SHARING.md#computer-migration).
 
-`backup` is experimental Linux/Codex-only development, separate from migration and
-team sharing. F1/F2 provide encrypted native/portable conversation checkpoints,
-explicit custody/policies, logical-head incremental reuse, partial coverage,
-multiple sources and durable resume. F3 adds explicit future recipient rotation
-with reviewed plans and public epoch maps. Historical re-encryption/native-sanitized
-profiles are not selected; scheduling and retention remain later cuts; no published release is implied. See [backup scope](BACKUP.md).
+`backup` is included in the published
+[v0.2.2 release](https://github.com/vitral-ai/context-session-librarian/releases/tag/v0.2.2)
+as an **experimental manual Linux/Codex-only feature**, separate from migration
+and team sharing. It provides encrypted native/portable conversation checkpoints,
+explicit policies, logical-head incremental reuse, partial coverage, multiple
+sources, durable resume and explicit future recipient rotation.
+
+Backup requires externally installed age v1.3.2 and distinct operational/external
+recovery public recipients. Keep the external recovery private identity outside
+the protected computer; repository access alone cannot decrypt backups. Positive
+system-keyring/headless operation remains unvalidated. Scheduling, automatic
+retention/garbage collection, historical re-encryption and native-sanitized backup
+profiles are not included. See [backup scope and custody](BACKUP.md).
 
 Codex portable export/share and migration upload support explicit
 `--repair-legacy-compaction` for the recognized orphaned final summary annotation
