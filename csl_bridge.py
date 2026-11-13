@@ -12,6 +12,16 @@ from csl_bridge_store import BridgeError, MAX_WIRE, Store, decode, encode, ident
 from csl_bridge_transport import local_call, ssh_argv
 
 
+def wait_seconds(value):
+    try:
+        number = int(value)
+    except (TypeError, ValueError):
+        raise argparse.ArgumentTypeError('wait --timeout must be an integer from 0 to 20 seconds') from None
+    if not 0 <= number <= 20:
+        raise argparse.ArgumentTypeError('wait --timeout must be 0..20 seconds; repeat wait with the returned cursor for longer waits')
+    return number
+
+
 def reviewed_text(path, scrub=False):
     from csl_secrets import SecretReview
     try:
@@ -211,5 +221,5 @@ def add_commands(subparsers, csl):
     wait = sub.add_parser('wait', help='Wait for correlated advances/final without inference or aggressive polling.')
     wait.add_argument('--agent', required=True)
     wait.add_argument('--after', type=int, default=0)
-    wait.add_argument('--timeout', type=int, default=20, help='Seconds, 0..20; timeout is not cancellation.')
+    wait.add_argument('--timeout', type=wait_seconds, default=20, help='Seconds, 0..20; timeout is not cancellation. Repeat with returned cursor for longer waits.')
     parser.set_defaults(func=run)

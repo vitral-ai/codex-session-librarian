@@ -308,6 +308,10 @@ class Connector:
                 self.deliver_event(row)
 
     def completed(self, agent, tid, status):
+        tasks = self.store.rows("SELECT * FROM tasks WHERE target=? AND turn=? AND status IN ('running','pending')", (agent, tid))
+        if not tasks:
+            self.answers.pop((self.agents[agent], tid), None)
+            return
         answer = self.answers.pop((self.agents[agent], tid), '')
         if not answer:
             turns = self.ready().call('thread/turns/list', {'threadId': self.agents[agent], 'limit': 5,
@@ -318,7 +322,6 @@ class Connector:
                                        if item.get('type') == 'agentMessage')[-12000:]
         if contains_findings(answer):
             answer = 'Result text withheld by partial secret detection. Review selected evidence locally; completion alone is not validation.'
-        tasks = self.store.rows('SELECT * FROM tasks WHERE target=? AND turn=?', (agent, tid))
         for task in tasks:
             event = {'task_id': task['id'], 'source': agent, 'target': task['source'],
                      'kind': 'final', 'text': answer, 'turn_id': tid, 'status': status}
@@ -332,6 +335,16 @@ class Connector:
         # Join first, then recover effects using native client message IDs. Missing
         # evidence remains uncertain; never auto-repeat an invocation.
         for agent, thread in self.agents.items():
+            uncertain_ops = [row for row in self.store.rows("SELECT id,peer,request FROM operations WHERE state='uncertain'")
+                             if not row['peer'].startswith('outbound:') and decode(row['request']).get('target') == agent]
+            uncertain_events = [row for row in self.store.rows("SELECT id,body FROM inbound WHERE delivery='uncertain'")
+                                if decode(row['body'])['target'] == agent]
+            unfinished_tasks = self.store.rows("SELECT turn FROM tasks WHERE target=? AND status IN ('running','pending')", (agent,))
+            if not (uncertain_ops or uncertain_events or unfinished_tasks):
+                if flush_pending:
+                    with self.locks[agent]:
+                        self.flush(agent)
+                continue  # a new/settled bridge has no reason to inspect native history
             turns, cursor = [], None
             for _ in range(10):
                 page = self.ready().call('thread/turns/list', {'threadId': thread, 'limit': 20,
@@ -343,10 +356,10 @@ class Connector:
             by_client = {item.get('clientId'): turn['id'] for turn in turns for item in turn.get('items', [])
                          if item.get('type') == 'userMessage' and item.get('clientId')}
             with self.store.transaction() as db:
-                for row in self.store.rows("SELECT id,body FROM inbound WHERE delivery='uncertain'"):
+                for row in uncertain_events:
                     if decode(row['body'])['target'] == agent and row['id'] in by_client:
                         db.execute("UPDATE inbound SET delivery='delivered' WHERE id=?", (row['id'],))
-            for row in self.store.rows("SELECT id,request FROM operations WHERE state='uncertain'"):
+            for row in uncertain_ops:
                 request = decode(row['request'])
                 if request.get('target') != agent or row['id'] not in by_client:
                     continue
@@ -355,8 +368,9 @@ class Connector:
                 self.store.operation(row['id'], 'delivered', result)
                 with self.store.transaction() as db:
                     db.execute("UPDATE tasks SET turn=?,status='running' WHERE id=?", (tid, row['id']))
+            recover_turns = {row['turn'] for row in self.store.rows("SELECT turn FROM tasks WHERE target=? AND status IN ('running','pending')", (agent,))}
             for turn in turns:
-                if turn['status'] in ('completed', 'interrupted', 'failed'):
+                if turn['id'] in recover_turns and turn['status'] in ('completed', 'interrupted', 'failed'):
                     self.answers[(thread, turn['id'])] = '\n'.join(i.get('text', '') for i in turn.get('items', [])
                         if i.get('type') == 'agentMessage')[-12000:]
                     self.completed(agent, turn['id'], turn['status'])

@@ -269,6 +269,12 @@ on its next activation. No model is started just to announce every update.
 Turn completion returns the final text/state automatically by the same route.
 Advance the local `wait --after` cursor only after consuming the returned event;
 retrying a wait with the old cursor rereads it without repeating work.
+Each wait is limited to **0..20 seconds**; repeat with the returned cursor for
+longer waits. A coordinator's `send_message` clarification enters the worker's
+native turn through steering. It is not a progress/final event addressed to that
+worker's `wait`; the worker should continue after the input reaches its runtime
+boundary. Use `wait` for results of tasks you delegated. A message retained while
+idle enters on activation; `followup` is the operation that activates an idle agent.
 
 To interrupt, use the exact current delegated turn from the receipt/status:
 
@@ -305,6 +311,10 @@ history for evidence before updating uncertain state. Recovery inspects at most
 remains uncertain. It never silently replays an invocation or guarantees
 exactly-once execution across a crash. A receipt `not_found` is not authority to
 create a replacement task while the prior outcome is unresolved.
+New or settled bridge state does not scan native history. Recovery reads are
+needed only for uncertain operations/event delivery or an unfinished delegated
+task whose completion may have been missed. Completion events unrelated to a
+delegated task are ignored before any fallback history lookup.
 
 Event watch requests block up to 15 seconds and reconnect with bounded backoff;
 tool waits block at most 20 seconds. They do not spend inference to poll. There

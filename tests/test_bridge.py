@@ -103,6 +103,29 @@ class BridgeTests(unittest.TestCase):
         result.update(kwargs)
         return result
 
+    def test_new_or_settled_bridge_never_scans_history_on_rejoin(self):
+        self.connector.reconcile()
+        self.assertFalse(self.runtime.calls)
+        self.connector.completed('worker', uid(), 'completed')
+        self.assertFalse(self.runtime.calls)
+        self.assertFalse(self.connector.store.rows('SELECT * FROM outbound'))
+
+    def test_completed_correlated_task_is_not_scanned_or_published_again(self):
+        result=self.connector.incoming('alice',self.request())
+        self.connector.answers[(self.thread,result['turn_id'])]='Synthetic final'
+        self.connector.completed('worker',result['turn_id'],'completed')
+        self.runtime.calls.clear()
+        self.connector.completed('worker',result['turn_id'],'completed')
+        self.connector.reconcile()
+        self.assertFalse(self.runtime.calls)
+        self.assertEqual(len(self.connector.store.rows('SELECT * FROM outbound')),1)
+
+    def test_cli_wait_invalid_timeout_reports_limit_before_ipc(self):
+        result=subprocess.run([sys.executable,str(Path(__file__).resolve().parents[1]/'csl'),'bridge','--home',str(self.home),'wait','--agent','worker','--timeout','60'],capture_output=True,text=True)
+        self.assertEqual(result.returncode,2)
+        self.assertIn('0..20 seconds',result.stderr)
+        self.assertIn('returned cursor',result.stderr)
+
     def test_followup_idle_then_active_uses_same_runtime_turn(self):
         first = self.connector.incoming('alice', self.request())
         second = self.connector.incoming('alice', self.request())
