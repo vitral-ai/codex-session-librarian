@@ -19,6 +19,7 @@ def coverage():
     commands["verify-live"] = {"codex": "experimental", "claude": "experimental"}
     commands["migrate"] = {"codex": "experimental", "claude": "not-integrated"}
     commands["backup"] = {"codex": "experimental", "claude": "not-integrated"}
+    commands["bridge"] = {"codex": "experimental", "claude": "not-integrated"}
     for name in ("native-cut", "native-clone", "native-sanitize"):
         commands[name]["codex"] = "experimental"
     return {"schema_version": 1, "providers": ["codex", "claude"], "commands": commands,
