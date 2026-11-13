@@ -9,8 +9,12 @@ conversation. A completed turn is not proof that its technical conclusion is val
 
 This is an experimental integration, not a supported cross-account Codex feature.
 Native Codex **0.167.1** has been exercised with synthetic loopback Responses
-backends, protocol clients and the actual terminal UI. Real inference, Mac, SSH to
-another computer, and same/different-account operation have **not** been validated.
+backends, protocol clients and the actual terminal UI. Two installed Linux
+containers also passed real restricted SSH, simulated network interruption,
+recovery and latency controls. Native model tools reached the connector through
+the optional MCP adapter in both containers. Real inference, native macOS/Windows,
+SSH to another physical computer, and same/different-account operation have
+**not** been validated.
 Synthetic answers in the laboratory are fabricated controls of the real runtime,
 not evidence of model behavior or real colleague collaboration.
 
@@ -70,7 +74,8 @@ host keys. No program here edits `authorized_keys`, SSH settings or permissions.
 Do not use an unrestricted SSH key as a substitute for this boundary: a remote
 user who can choose the receiver's environment or execute arbitrary commands
 already has broader OS authority. Each direction's trusted setup belongs to
-that machine's owner. SSH/login integration remains untested in this candidate.
+that machine's owner. Restricted SSH has been tested in isolated Linux
+containers; real colleague devices and Codex-account integration remain untested.
 
 For a synthetic same-UID laboratory only, `peer --lab-home DIR` selects another
 explicit bridge home instead of SSH. This does not authenticate a real person,
@@ -90,6 +95,34 @@ does not start a substitute. Local IPC is private to the OS user; programs with
 that user's full privileges are inside the local trust boundary.
 
 ## Coordinator And Worker
+
+For tools used **by a model**, prefer the optional stdio MCP adapter. Sandboxed
+shell commands can be denied access to the connector's Unix socket even when
+the file is inside the writable workspace. Do not broadly enable command
+network access to work around that boundary. Terminal/operator CLI calls remain
+available separately.
+
+Configure the adapter explicitly for the existing local agent, after registering
+that conversation and starting its connector. This initial setup grants only the
+bridge's existing operations, not shell, filesystem, runtime or login APIs:
+
+```toml
+[mcp_servers.csl_bridge]
+command = "/absolute/path/to/context-session-librarian/csl-bridge-mcp"
+args = ["--home", "/absolute/private/bridge-home", "--agent", "coordinator"]
+required = true
+tool_timeout_sec = 25
+```
+
+Use the worker's own fixed agent name on its side. Reload the local MCP
+configuration through the supported Codex interface before sending work. The
+adapter never changes configuration itself or starts a substitute conversation.
+Its tools are `followup_task`, `send_message`, `send_progress`, `wait_agent`,
+`list_agents`, `agent_status`, `interrupt_agent`, and `operation_receipt`.
+Source identity and home are fixed by the local configuration; model arguments
+cannot replace them. Messages remain remote data subject to the receiver's
+mandate. Selected text with possible secrets is rejected; there is no persistent
+allow-secrets setting. Waits and other tool calls can run concurrently.
 
 Use selected UTF-8 text in a file or stdin (`--text-file -`). Bodies never enter
 SSH command strings or Codex CLI arguments. No entire history, binary attachment,
