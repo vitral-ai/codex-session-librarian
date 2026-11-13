@@ -339,7 +339,14 @@ class Connector:
                              if not row['peer'].startswith('outbound:') and decode(row['request']).get('target') == agent]
             uncertain_events = [row for row in self.store.rows("SELECT id,body FROM inbound WHERE delivery='uncertain'")
                                 if decode(row['body'])['target'] == agent]
-            unfinished_tasks = self.store.rows("SELECT turn FROM tasks WHERE target=? AND status IN ('running','pending')", (agent,))
+            # Repair only local crash windows with an already-confirmed native turn.
+            # A pending, never-invoked task is not uncertain and needs no history scan.
+            for task in self.store.rows("SELECT tasks.id,operations.result FROM tasks JOIN operations ON tasks.id=operations.id WHERE tasks.target=? AND tasks.status='pending' AND tasks.turn IS NULL AND operations.state='delivered'", (agent,)):
+                result = decode(task['result']) if task['result'] else {}
+                if result.get('turn_id') and result.get('thread_id') == thread:
+                    with self.store.transaction() as db:
+                        db.execute("UPDATE tasks SET turn=?,status='running' WHERE id=?", (result['turn_id'], task['id']))
+            unfinished_tasks = self.store.rows("SELECT turn FROM tasks WHERE target=? AND status IN ('running','pending') AND turn IS NOT NULL", (agent,))
             if not (uncertain_ops or uncertain_events or unfinished_tasks):
                 if flush_pending:
                     with self.locks[agent]:

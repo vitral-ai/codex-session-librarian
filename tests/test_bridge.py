@@ -110,6 +110,26 @@ class BridgeTests(unittest.TestCase):
         self.assertFalse(self.runtime.calls)
         self.assertFalse(self.connector.store.rows('SELECT * FROM outbound'))
 
+    def test_pending_never_invoked_task_does_not_trigger_history_scan(self):
+        request=self.request()
+        self.connector.store.reserve('alice',request)
+        with self.connector.store.transaction() as db:
+            db.execute('INSERT INTO tasks VALUES(?,?,?,?,?,?)',(request['id'],'alice','coordinator','worker',None,'pending'))
+        self.connector.reconcile(flush_pending=False)
+        self.assertFalse(self.runtime.calls)
+
+    def test_confirmed_turn_repairs_local_pending_task_crash_before_recovery(self):
+        receipt=self.connector.incoming('alice',self.request())
+        with self.connector.store.transaction() as db:
+            db.execute("UPDATE tasks SET turn=NULL,status='pending'")
+        self.runtime.history[-1]['status']='completed'
+        self.runtime.history[-1]['items'].append({'type':'agentMessage','text':'Recovered own final'})
+        self.runtime.turn=None
+        self.connector.reconcile()
+        row=self.connector.store.rows('SELECT turn,status FROM tasks')[0]
+        self.assertEqual(row,{'turn':receipt['turn_id'],'status':'completed'})
+        self.assertEqual(len(self.connector.store.rows('SELECT * FROM outbound')),1)
+
     def test_completed_correlated_task_is_not_scanned_or_published_again(self):
         result=self.connector.incoming('alice',self.request())
         self.connector.answers[(self.thread,result['turn_id'])]='Synthetic final'
