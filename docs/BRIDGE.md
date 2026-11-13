@@ -124,6 +124,13 @@ cannot replace them. Messages remain remote data subject to the receiver's
 mandate. Selected text with possible secrets is rejected; there is no persistent
 allow-secrets setting. Waits and other tool calls can run concurrently.
 
+The native runtime can request local approval before a side-effecting MCP call,
+including `send_progress`. A laboratory with no approval UI can therefore pause
+even when the selected operation is permitted by bridge configuration. The
+bridge never accepts that approval or treats a peer message as local consent.
+The runtime owner must inspect and decide the native request locally. A
+one-call approval does not establish unattended operation or persistent trust.
+
 ### Current Caller Without A Runtime Endpoint
 
 If the caller's existing UI exposes shell tools but no compatible runtime
