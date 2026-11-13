@@ -59,10 +59,16 @@ def exchange(config, local_peer, request):
     if config['transport'] == 'lab':
         # Explicit same-UID laboratory only. This is not SSH authentication evidence.
         return local_call(config['home'], {'local_op': '_incoming', 'trusted_peer': local_peer, 'request': request})
-    if config['transport'] != 'ssh':
+    if config['transport'] not in ('ssh', 'operator'):
         raise BridgeError('Unknown bridge transport')
+    if config['transport'] == 'operator':
+        # Trusted local operator helper owns credentials and a fixed remote endpoint.
+        # No command/path/identity comes from the remote message or model arguments.
+        argv = [config['helper']]
+    else:
+        argv = ssh_argv(config['alias'], config.get('ssh_config'))
     try:
-        result = subprocess.run(ssh_argv(config['alias'], config.get('ssh_config')), input=(encode(request) + '\n').encode(),
+        result = subprocess.run(argv, input=(encode(request) + '\n').encode(),
             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=25, check=False)
     except (OSError, subprocess.TimeoutExpired):
         raise BridgeError('SSH outcome uncertain; reconcile receipt before retry') from None

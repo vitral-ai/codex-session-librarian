@@ -101,6 +101,17 @@ For a synthetic same-UID laboratory only, `peer --lab-home DIR` selects another
 explicit bridge home instead of SSH. This does not authenticate a real person,
 account or remote device.
 
+An owner-authorized operator test can instead select `peer --operator-helper
+/absolute/local/helper`. That trusted local executable receives only one JSON
+request on stdin and returns the receiver's JSON response. It owns an explicitly
+fixed remote endpoint, absolute interpreter/receiver paths, and the existing SSH
+credential integration; model and peer messages cannot supply shell commands or
+paths. This permits a Mac receiver to use its private Python without changing
+login profiles or PATH. Operator SSH retains the owner's normal OS authority;
+the selected bridge operations do not reduce that separate key's privileges.
+The helper and its credential storage are local operator setup, not bundled
+credentials or an automatically installed remote service.
+
 Start the connector explicitly in a terminal for the session on each side:
 
 ```sh

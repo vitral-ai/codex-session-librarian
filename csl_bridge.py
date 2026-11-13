@@ -73,6 +73,11 @@ def configure(args):
                     raise BridgeError('Explicit SSH config requires SSH transport')
                 if args.receive_only:
                     config = {'transport': 'receive-only'}
+                elif args.operator_helper:
+                    helper = args.operator_helper.expanduser().absolute()
+                    if not helper.is_file() or not os.access(helper, os.X_OK):
+                        raise BridgeError('Select an existing executable local operator helper')
+                    config = {'transport': 'operator', 'helper': str(helper)}
                 elif args.lab_home:
                     config = {'transport': 'lab', 'home': str(args.lab_home.expanduser().absolute())}
                 else:
@@ -167,6 +172,7 @@ def add_commands(subparsers, csl):
     transport.add_argument('--ssh-alias', help='Trusted SSH config alias; fixed receiver, no arbitrary SSH options.')
     transport.add_argument('--lab-home', type=Path, help='Synthetic same-UID local transport; NOT SSH authentication.')
     transport.add_argument('--receive-only', action='store_true', help='Peer initiates requests/watch; no reverse transport or network connection is attempted.')
+    transport.add_argument('--operator-helper', type=Path, help='Trusted local executable with fixed operator SSH endpoint; JSON stdin only, no credentials in bridge.')
     peer.add_argument('--ssh-config', type=Path, help='Explicit private trusted SSH config file, separate from personal SSH setup.')
     peer.add_argument('--allow-agent', action='append', required=True)
     peer.add_argument('--allow-op', action='append', required=True,

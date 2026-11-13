@@ -40,6 +40,18 @@ class ClientTests(unittest.TestCase):
      connector.incoming('ubuntu',{**request,'id':str(uuid.uuid4()),'source':'worker','target':'coordinator'})
     factory.assert_not_called()
    finally:connector.close()
+ def test_operator_helper_receives_json_stdin_without_shell_or_remote_command_arguments(self):
+  from csl_bridge_transport import exchange
+  from unittest.mock import patch
+  from types import SimpleNamespace
+  request={'version':1,'op':'status','id':str(uuid.uuid4()),'target':'worker'}
+  helper='/private/owned helper'
+  with patch('csl_bridge_transport.subprocess.run',return_value=SimpleNamespace(returncode=0,stdout=b'{"ok":true,"data":{"status":"idle"}}')) as run:
+   self.assertEqual(exchange({'transport':'operator','helper':helper},'manunruks',request),{'status':'idle'})
+  self.assertEqual(run.call_args.args[0],[helper])
+  self.assertNotIn('shell',run.call_args.kwargs)
+  self.assertEqual(json.loads(run.call_args.kwargs['input']),request)
+
  def test_explicit_private_ssh_config_is_one_literal_argument(self):
   with tempfile.TemporaryDirectory() as tmp:
    path=Path(tmp)/'config with spaces';path.write_text('Host ubuntu-bridge\n HostName 127.0.0.1\n');path.chmod(0o600)
