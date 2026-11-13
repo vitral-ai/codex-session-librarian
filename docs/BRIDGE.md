@@ -30,9 +30,29 @@ bridge checks `thread/loaded/list` and rejoins that runtime. It never creates a
 thread, imports history, starts another runtime or adopts login credentials.
 Keep the owner's local UI available for approvals; the bridge never answers them.
 
-An app-server `--listen unix://PATH` endpoint was tested. An arbitrary managed
-daemon's control socket or `app-server proxy` is **not** interchangeable with that
-endpoint without verification. A standalone TUI using `--no-daemon` is not
+An app-server `--listen unix://PATH` endpoint was tested. Native **0.167.2** was
+also tested in an isolated Linux lab with no model calls: its default existing
+control endpoint is `$CODEX_HOME/app-server-control/app-server-control.sock`,
+which can be a symlink to a shorter private path. That control endpoint accepts
+WebSocket framing. Resolve the explicit endpoint before connecting, especially
+on Darwin where the original rendezvous path may exceed the Unix path limit.
+The pinned 3122 candidate driver also passed when given the resolved path.
+
+The official `app-server proxy --sock PATH` relays **raw bytes** through its
+stdin/stdout; it does not translate JSON lines into WebSocket frames. The optional
+Python `Runtime(path, proxy_executable=owner_selected_codex)` transport preserves
+the HTTP upgrade and masked WebSocket frames over those pipes. A synthetic
+0.167.2 check confirmed the same already-loaded thread through both transports;
+closing the proxy left the server alive. This launches only a transport child,
+never a native server or replacement agent. Plain JSON sent directly to proxy
+stdin is an invalid test of this WebSocket endpoint. See the official
+[0.167.2 proxy dispatch](https://github.com/openai/codex/blob/rust-v0.167.2/codex-rs/cli/src/main.rs)
+and [byte-relay implementation](https://github.com/openai/codex/blob/rust-v0.167.2/codex-rs/stdio-to-uds/src/lib.rs).
+
+These checks do not establish access to an arbitrary daemon, account or Mac.
+First confirm the owner-selected socket and that the actual conversation is
+already in `thread/loaded/list`; do not load a thread just to make this check pass.
+A standalone TUI using `--no-daemon` is not
 automatically attachable. Its owner would have to stop it at a safe boundary and
 host the **same** conversation in a compatible runtime, then verify continuity.
 Never start another server against a conversation that another process owns.

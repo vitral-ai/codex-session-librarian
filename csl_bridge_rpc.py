@@ -6,6 +6,8 @@ import os
 from pathlib import Path
 import queue
 import socket
+import selectors
+import subprocess
 import struct
 import threading
 import time
@@ -19,17 +21,63 @@ class RuntimeRejected(RuntimeError):
     pass
 
 
+class ProxyStream:
+    """WebSocket bytes over the official proxy's pipes, not JSON-line framing."""
+    def __init__(self, path, executable):
+        self.process = subprocess.Popen([str(executable), 'app-server', 'proxy', '--sock', str(path)],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, bufsize=0)
+        self.timeout = None
+
+    def settimeout(self, value):
+        self.timeout = value
+
+    def connect(self, _):
+        pass  # official proxy connects only to the explicitly selected existing socket
+
+    def sendall(self, data):
+        view = memoryview(data)
+        while view:
+            count = os.write(self.process.stdin.fileno(), view)
+            if not count:
+                raise OSError('Existing proxy transport closed')
+            view = view[count:]
+
+    def recv(self, size):
+        with selectors.DefaultSelector() as selector:
+            selector.register(self.process.stdout, selectors.EVENT_READ)
+            if not selector.select(self.timeout):
+                raise TimeoutError('Existing proxy transport timed out')
+        return os.read(self.process.stdout.fileno(), size)
+
+    def shutdown(self, _):
+        if self.process.stdin and not self.process.stdin.closed:
+            self.process.stdin.close()
+        if self.process.poll() is None:
+            self.process.terminate()  # only this transport child, never the native server
+
+    def close(self):
+        self.shutdown(None)
+        try:
+            self.process.wait(timeout=2)
+        except subprocess.TimeoutExpired:
+            self.process.kill()
+            self.process.wait(timeout=2)
+        if self.process.stdout:
+            self.process.stdout.close()
+
+
 class Runtime:
-    def __init__(self, path):
-        self.path = Path(path)
+    def __init__(self, path, proxy_executable=None):
+        self.path = Path(path).expanduser().resolve()
         self.events = queue.Queue()
         self.condition = threading.Condition()
         self.writes = threading.Lock()
         self.responses = {}
         self.number = 0
         self.connected = False
-        self.socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        self.socket = None
         try:
+            self.socket = ProxyStream(self.path, proxy_executable) if proxy_executable else socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
             self.socket.settimeout(5)
             self.socket.connect(str(self.path))
             key = base64.b64encode(os.urandom(16)).decode()
@@ -149,6 +197,8 @@ class Runtime:
 
     def close(self):
         self.connected = False
+        if self.socket is None:
+            return
         try:
             self.socket.shutdown(socket.SHUT_RDWR)
         except OSError:
