@@ -38,7 +38,7 @@ def reviewed_text(path, scrub=False):
 def configure(args):
     if args.action == 'init':
         identity = name(args.identity)
-        path = args.runtime_socket.expanduser().absolute()
+        path = args.runtime_socket.expanduser().absolute() if args.runtime_socket else None
         store = Store(args.home, create=True)
     else:
         store = Store(args.home)
@@ -58,7 +58,7 @@ def configure(args):
                 if old:
                     raise BridgeError('Bridge already initialized; preserve its configuration')
                 db.executemany('INSERT INTO config VALUES(?,?)',
-                               [('identity', encode(identity)), ('runtime_socket', encode(str(path)))])
+                               [('identity', encode(identity)), ('runtime_socket', encode(str(path) if path else None))])
             elif args.action == 'agent':
                 agent, thread = name(args.agent), identifier(args.thread)
                 db.execute('INSERT INTO agents VALUES(?,?)', (agent, thread))
@@ -69,11 +69,17 @@ def configure(args):
                 agents = [name(a) for a in args.allow_agent]
                 if not set(agents) <= set(store.agents()):
                     raise BridgeError('Allow only explicitly registered local agents')
-                if args.lab_home:
+                if args.ssh_config and not args.ssh_alias:
+                    raise BridgeError('Explicit SSH config requires SSH transport')
+                if args.receive_only:
+                    config = {'transport': 'receive-only'}
+                elif args.lab_home:
                     config = {'transport': 'lab', 'home': str(args.lab_home.expanduser().absolute())}
                 else:
-                    ssh_argv(args.ssh_alias)
+                    ssh_argv(args.ssh_alias, args.ssh_config)
                     config = {'transport': 'ssh', 'alias': args.ssh_alias}
+                    if args.ssh_config:
+                        config['ssh_config'] = str(args.ssh_config.expanduser().absolute())
                 config.update(allow_agents=agents, allow_ops=sorted(set(args.allow_op)))
                 db.execute('INSERT INTO peers VALUES(?,?)', (peer, encode(config)))
         return {'state': 'configured', 'action': args.action, 'inference': False}
@@ -95,7 +101,7 @@ def run(args):
                 previous[sig] = signal.signal(sig, stopping)
             try:
                 connector.start()
-                print(encode({'state': 'running', 'foreground': True, 'runtime': 'existing-only',
+                print(encode({'state': 'running', 'foreground': True, 'runtime': 'tool-client' if connector.client_only else 'existing-only',
                               'notice': 'Existing compatible runtime only. Previously authorized pending followups may resume.'}), flush=True)
                 while not connector.stop.wait(.5):
                     pass
@@ -145,7 +151,9 @@ def add_commands(subparsers, csl):
     sub = parser.add_subparsers(dest='action', required=True)
     init = sub.add_parser('init', help='Initialize explicit private state; does not start anything.')
     init.add_argument('--id', dest='identity', required=True)
-    init.add_argument('--runtime-socket', type=Path, required=True, help='Existing app-server Unix WebSocket socket; never a new runtime.')
+    hosting = init.add_mutually_exclusive_group(required=True)
+    hosting.add_argument('--runtime-socket', type=Path, help='Existing app-server Unix WebSocket socket; never a new runtime.')
+    hosting.add_argument('--client-only', action='store_true', help='Existing caller receives events through wait tool results; no runtime attach, activation or async injection into the caller.')
     agent = sub.add_parser('agent', help='Register an existing conversation as an agent, offline.')
     agent.add_argument('agent')
     agent.add_argument('--thread', required=True)
@@ -154,6 +162,8 @@ def add_commands(subparsers, csl):
     transport = peer.add_mutually_exclusive_group(required=True)
     transport.add_argument('--ssh-alias', help='Trusted SSH config alias; fixed receiver, no arbitrary SSH options.')
     transport.add_argument('--lab-home', type=Path, help='Synthetic same-UID local transport; NOT SSH authentication.')
+    transport.add_argument('--receive-only', action='store_true', help='Peer initiates requests/watch; no reverse transport or network connection is attempted.')
+    peer.add_argument('--ssh-config', type=Path, help='Explicit private trusted SSH config file, separate from personal SSH setup.')
     peer.add_argument('--allow-agent', action='append', required=True)
     peer.add_argument('--allow-op', action='append', required=True,
                       choices=['followup', 'send_message', 'status', 'interrupt', 'receipt', 'watch', 'agents'])

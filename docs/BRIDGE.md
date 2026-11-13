@@ -124,6 +124,37 @@ cannot replace them. Messages remain remote data subject to the receiver's
 mandate. Selected text with possible secrets is rejected; there is no persistent
 allow-secrets setting. Waits and other tool calls can run concurrently.
 
+### Current Caller Without A Runtime Endpoint
+
+If the caller's existing UI exposes shell tools but no compatible runtime
+endpoint, an explicit client can send work and return progress/finals through
+its `wait` tool results. Register the caller's actual conversation UUID for
+local provenance; it does not provide runtime access or authentication:
+
+```sh
+csl bridge --home "$ORIGIN_HOME" init --id origin --client-only
+csl bridge --home "$ORIGIN_HOME" agent coordinator --thread "$ACTUAL_CALLER_THREAD_UUID"
+csl bridge --home "$ORIGIN_HOME" peer worker-host --ssh-alias worker-bridge \
+  --ssh-config "$PRIVATE_SSH_CONFIG" --allow-agent coordinator \
+  --allow-op watch --allow-op status --allow-op agents --allow-op receipt
+csl bridge --home "$ORIGIN_HOME" run
+```
+
+The SSH configuration must be an owned private regular file. The receiver can
+configure this origin using `peer origin --receive-only` and its own explicit
+permissions: the origin initiates requests and watches; no reverse SSH access
+or origin listener is needed. The worker publishes progress/final normally.
+The caller sends and waits using the same commands below, in its actual
+conversation. It retains stable operation IDs, receipts and event cursors.
+
+This client never attaches to a native conversation, launches a model, or creates
+a replacement coordinator. Its status is `tool-client`; it rejects incoming
+activation, steering and interruption of the caller. An explicit `wait` result
+delivers events to the calling model. Asynchronous injection into a caller that
+is busy elsewhere, or waking that caller when idle, is **not** provided by this
+mode. It is a partial integration for testing a real current caller, not full
+runtime coordination equivalence.
+
 Use selected UTF-8 text in a file or stdin (`--text-file -`). Bodies never enter
 SSH command strings or Codex CLI arguments. No entire history, binary attachment,
 repository or credential file is collected. References may be ordinary text;

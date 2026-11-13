@@ -21,6 +21,7 @@ class Connector:
         self.store = Store(home)
         self.identity = self.store.setting('identity')
         self.runtime_path = self.store.setting('runtime_socket')
+        self.client_only = self.runtime_path is None
         self.agents, self.peers = self.store.agents(), self.store.peers()
         self.factory = runtime_factory
         self.runtime = None
@@ -50,9 +51,11 @@ class Connector:
         thread.start()
 
     def start(self):
-        self.spawn(self.runtime_loop)
+        if not self.client_only:
+            self.spawn(self.runtime_loop)
         for peer in self.peers:
-            self.spawn(self.peer_loop, peer)
+            if self.peers[peer]['transport'] != 'receive-only':
+                self.spawn(self.peer_loop, peer)
         connector = self
         class Handler(socketserver.StreamRequestHandler):
             def handle(self):
@@ -91,6 +94,10 @@ class Connector:
         return self.runtime
 
     def current(self, agent):
+        if self.client_only:
+            return {'agent': agent, 'thread_id': self.agents[agent], 'status': 'tool-client',
+                    'turn_id': None, 'active_flags': [], 'last_task': None,
+                    'delivery': 'wait tool result only; no runtime attach or async injection'}
         runtime = self.ready()
         thread = self.agents[agent]
         state = runtime.call('thread/read', {'threadId': thread})['thread']['status']
@@ -214,6 +221,8 @@ class Connector:
         if peer not in self.peers or request['op'] not in self.peers[peer]['allow_ops']:
             raise BridgeError('Peer operation not permitted')
         op = request['op']
+        if self.client_only and op in ('followup', 'send_message', 'interrupt'):
+            raise BridgeError('Tool client has no native inbound activation or message injection endpoint')
         target = request.get('target')
         if target is not None and (target not in self.agents or target not in self.peers[peer]['allow_agents']):
             raise BridgeError('Peer agent not permitted')

@@ -4,6 +4,8 @@ import re
 import socket
 import subprocess
 import sys
+from pathlib import Path
+import stat
 
 from csl_bridge_store import BridgeError, MAX_WIRE, decode, encode, name, private_directory, validate
 
@@ -34,10 +36,20 @@ def local_call(home, request, timeout=25):
         sock.close()
 
 
-def ssh_argv(alias):
+def ssh_argv(alias, config=None):
     if not isinstance(alias, str) or not re.fullmatch(r'[A-Za-z][A-Za-z0-9_.-]{0,63}', alias):
         raise BridgeError('Use a concrete trusted SSH config alias')
-    return ['ssh', '-T', '-oBatchMode=yes', '-oStrictHostKeyChecking=yes',
+    selected = []
+    if config is not None:
+        path = Path(config).expanduser().absolute()
+        try:
+            info = path.lstat()
+        except OSError:
+            raise BridgeError('Explicit SSH configuration must exist privately') from None
+        if not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid() or info.st_mode & 0o077:
+            raise BridgeError('Explicit SSH configuration must be an owned private regular file')
+        selected = ['-F', str(path)]
+    return ['ssh', *selected, '-T', '-oBatchMode=yes', '-oStrictHostKeyChecking=yes',
             '-oClearAllForwardings=yes', '-oPermitLocalCommand=no', '-oConnectTimeout=5',
             '--', alias, REMOTE_COMMAND]
 
@@ -50,7 +62,7 @@ def exchange(config, local_peer, request):
     if config['transport'] != 'ssh':
         raise BridgeError('Unknown bridge transport')
     try:
-        result = subprocess.run(ssh_argv(config['alias']), input=(encode(request) + '\n').encode(),
+        result = subprocess.run(ssh_argv(config['alias'], config.get('ssh_config')), input=(encode(request) + '\n').encode(),
             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=25, check=False)
     except (OSError, subprocess.TimeoutExpired):
         raise BridgeError('SSH outcome uncertain; reconcile receipt before retry') from None
