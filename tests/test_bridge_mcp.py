@@ -9,7 +9,7 @@ from unittest.mock import patch
 import uuid
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from csl_bridge_mcp import Adapter, serve
+from csl_bridge_mcp import Adapter, serve, configuration
 from csl_bridge_store import BridgeError, Store, encode
 
 
@@ -25,6 +25,26 @@ class MCPTests(unittest.TestCase):
 
     def tearDown(self):
         self.temp.cleanup()
+
+    def test_reviewable_configuration_scopes_explicit_consent_without_applying(self):
+        import tomllib
+        before = set(self.home.iterdir())
+        with patch('csl_bridge_mcp.local_call') as call:
+            profile = tomllib.loads(configuration(self.home, 'worker', ['send_progress']))
+        call.assert_not_called()
+        self.assertEqual(before, set(self.home.iterdir()))
+        config = profile['mcp_servers']['csl_bridge']
+        self.assertEqual(config['tools'], {'send_progress': {'approval_mode': 'approve'}})
+        self.assertEqual(config['default_tools_approval_mode'], 'writes')
+        self.assertEqual(config['args'], ['--home', str(self.home), '--agent', 'worker'])
+        self.assertFalse(set(config['enabled_tools']) & {'followup_task', 'interrupt_agent', 'send_message'})
+        self.assertNotIn('approval_policy', profile)
+        self.assertNotIn('sandbox_mode', profile)
+        unapproved = tomllib.loads(configuration(self.home, 'worker'))['mcp_servers']['csl_bridge']
+        self.assertNotIn('tools', unapproved)
+        self.assertNotIn('send_progress', unapproved['enabled_tools'])
+        with self.assertRaises(BridgeError):
+            configuration(self.home, 'worker', ['followup_task'])
 
     def test_fixed_identity_and_no_sensitive_surfaces(self):
         with patch('csl_bridge_mcp.local_call', return_value={'state': 'delivered'}) as call:

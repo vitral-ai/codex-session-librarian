@@ -131,6 +131,28 @@ bridge never accepts that approval or treats a peer message as local consent.
 The runtime owner must inspect and decide the native request locally. A
 one-call approval does not establish unattended operation or persistent trust.
 
+For an explicit initial local grant limited to communication tools, print a
+profile for review without applying it:
+
+```sh
+csl bridge --home "$BOB_BRIDGE_HOME" mcp-config --agent worker --approve-tool send_progress
+```
+
+The output binds the existing local agent/home, exposes the selected message
+tools plus read-only queries, keeps the server default at `writes`, and sets
+only the selected tool's `approval_mode` to `approve`. No configuration is
+written or reloaded. The owner must review and apply the profile locally;
+this is an explicit initial grant to that bounded tool, not consent derived
+from a peer message. `send_message` can be selected separately. Task activation
+and interruption are excluded from this communication profile. Peer allowlists,
+active-task binding, fixed source identity and secret checks still apply.
+
+Native 0.167.1 with a synthetic backend verified that `auto` still prompted
+for `send_progress`, while a per-tool `approve` allowed that tool and left
+an unselected side-effecting tool requiring approval. This does not change
+shell policies or require false read-only annotations. See the official
+[per-tool MCP configuration reference](https://learn.chatgpt.com/docs/config-file/config-reference).
+
 ### Current Caller Without A Runtime Endpoint
 
 If the caller's existing UI exposes shell tools but no compatible runtime
@@ -161,6 +183,23 @@ delivers events to the calling model. Asynchronous injection into a caller that
 is busy elsewhere, or waking that caller when idle, is **not** provided by this
 mode. It is a partial integration for testing a real current caller, not full
 runtime coordination equivalence.
+
+For the specific tool host that exposes `functions.exec`, `yield_control()` and
+`notify()`, [current_caller_collector.js](../experiments/bridge/current_caller_collector.js)
+is a reviewable bounded collector. The existing caller runs it itself, with its
+own origin home and consumed cursor. It leaves the tool invocation alive,
+waits without inference, and emits remote events as late tool outputs while
+the caller can continue other work. It sends no assignments, changes no policy,
+and never addresses a different caller. Stop the cell to cancel collection;
+an outstanding CLI wait ends within its bounded timeout. Durable bridge events
+can be replayed from the last consumed cursor.
+
+A synthetic delayed notification was observed in the implementer's active
+conversation during another tool operation, before any explicit cell wait.
+The actual coordinator's collector integration remains pending review/test.
+These helpers are supplied by that tool host, not a documented general Codex
+app-server or MCP push-to-model API. The snippet does not establish delivery
+while the caller is idle or after the tool invocation/session has ended.
 
 Use selected UTF-8 text in a file or stdin (`--text-file -`). Bodies never enter
 SSH command strings or Codex CLI arguments. No entire history, binary attachment,

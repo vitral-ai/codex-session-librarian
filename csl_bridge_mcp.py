@@ -38,6 +38,27 @@ TOOLS = {
 }
 
 
+def configuration(home, agent, approve_tools=()):
+    """Render an explicit local communication grant; never apply configuration."""
+    approved = set(approve_tools)
+    if not approved <= {'send_progress', 'send_message'}:
+        raise BridgeError('Only explicitly selected message tools are eligible for this profile')
+    adapter = Adapter(home, agent)  # validate fixed registered identity without contacting runtime
+    enabled = sorted(approved | {'wait_agent', 'list_agents', 'agent_status', 'operation_receipt'})
+    quoted = lambda value: json.dumps(str(value), ensure_ascii=False)
+    lines = ['# Review locally before applying; this command changes no configuration.',
+             '# Explicit per-tool consent. Runtime shell/approval policies remain separate.',
+             '[mcp_servers.csl_bridge]',
+             'command = ' + quoted(Path(__file__).resolve().parent / 'csl-bridge-mcp'),
+             'args = [' + ', '.join(map(quoted, ['--home', adapter.home.expanduser().absolute(), '--agent', adapter.agent])) + ']',
+             'required = true', 'startup_timeout_sec = 10', 'tool_timeout_sec = 25',
+             'enabled_tools = [' + ', '.join(map(quoted, enabled)) + ']',
+             'default_tools_approval_mode = "writes"']
+    for tool in sorted(approved):
+        lines += ['', '[mcp_servers.csl_bridge.tools.' + tool + ']', 'approval_mode = "approve"']
+    return '\n'.join(lines)
+
+
 class Adapter:
     def __init__(self, home, agent):
         self.home, self.agent = Path(home), name(agent)

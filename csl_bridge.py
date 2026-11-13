@@ -110,6 +110,10 @@ def run(args):
                 for sig, old in previous.items():
                     signal.signal(sig, old)
             return
+        elif args.action == 'mcp-config':
+            from csl_bridge_mcp import configuration
+            print(configuration(args.home, args.agent, args.approve_tool))
+            return
         elif args.action == 'agents' and not args.peer:
             result = local_call(args.home, {'local_op': 'agents'})
         elif args.action == 'wait':
@@ -168,6 +172,10 @@ def add_commands(subparsers, csl):
     peer.add_argument('--allow-op', action='append', required=True,
                       choices=['followup', 'send_message', 'status', 'interrupt', 'receipt', 'watch', 'agents'])
     sub.add_parser('run', help='Run connector in foreground for this session; Ctrl-C stops it, not Codex work.')
+    mcp_config = sub.add_parser('mcp-config', help='Print a reviewable local MCP profile; never applies consent/configuration.')
+    mcp_config.add_argument('--agent', required=True, help='Explicit registered local identity bound to the tools.')
+    mcp_config.add_argument('--approve-tool', action='append', default=[], choices=['send_progress', 'send_message'],
+        help='Explicit initial local consent for this message tool only; other side-effecting tools remain unavailable.')
     agents = sub.add_parser('agents', help='List registered local agents, or the agents a peer permits you to inspect.')
     agents.add_argument('--peer')
     agents.add_argument('--request-id')
