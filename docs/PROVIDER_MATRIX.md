@@ -23,6 +23,7 @@ registry. Update implementation, tests and this document in the same change.
 | --- | --- | --- |
 | `annotate` | supported | not-integrated |
 | `backup` | experimental | not-integrated |
+| `bridge` | experimental | not-integrated |
 | `capabilities` | supported | supported |
 | `cockpit` | supported | not-integrated |
 | `convert` | experimental | experimental |
