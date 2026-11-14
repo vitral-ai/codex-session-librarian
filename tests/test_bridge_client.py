@@ -18,7 +18,7 @@ class ClientTests(unittest.TestCase):
    home=Path(tmp)/'origin'; thread=str(uuid.uuid4()); task=str(uuid.uuid4()); turn=str(uuid.uuid4())
    store=Store(home,create=True)
    with store.transaction() as db:
-    db.executemany('INSERT INTO config VALUES(?,?)',[('identity',encode('manunruks')),('runtime_socket',encode(None))])
+    db.executemany('INSERT INTO config VALUES(?,?)',[('identity',encode('origin')),('runtime_socket',encode(None))])
     db.execute('INSERT INTO agents VALUES(?,?)',('coordinator',thread))
     db.execute('INSERT INTO peers VALUES(?,?)',('ubuntu',encode({'transport':'receive-only','allow_agents':['coordinator'],'allow_ops':['followup','status']})))
    request={'version':1,'op':'followup','id':task,'source':'coordinator','target':'worker','text':'Review synthetic fixture'}
@@ -47,7 +47,7 @@ class ClientTests(unittest.TestCase):
   request={'version':1,'op':'status','id':str(uuid.uuid4()),'target':'worker'}
   helper='/private/owned helper'
   with patch('csl_bridge_transport.subprocess.run',return_value=SimpleNamespace(returncode=0,stdout=b'{"ok":true,"data":{"status":"idle"}}')) as run:
-   self.assertEqual(exchange({'transport':'operator','helper':helper},'manunruks',request),{'status':'idle'})
+   self.assertEqual(exchange({'transport':'operator','helper':helper},'origin',request),{'status':'idle'})
   self.assertEqual(run.call_args.args[0],[helper])
   self.assertNotIn('shell',run.call_args.kwargs)
   self.assertEqual(json.loads(run.call_args.kwargs['input']),request)

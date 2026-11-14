@@ -2,7 +2,7 @@
 
 ## Version records
 
-### v0.3.0 — release preparation
+### v0.3.0
 
 This version adds experimental live coordination of existing Codex conversations,
 an optional bound MCP adapter and explicit client-only origins. The bridge does
@@ -153,7 +153,7 @@ its version is explicitly changed; never mix participant versions silently.
 4. Install from the published tag in a fresh isolated environment. Check version,
    resolved SHA and demo. Align README, web and user documentation with reality.
 
-Use the operator's own authorized GitHub identity (Manunruks uses gh-manunruks).
+Use the operator's own authorized GitHub identity.
 Repository access does not itself authorize a new version, a transfer or scope
 expansion. Package-registry publication requires its own plan and verification.
 

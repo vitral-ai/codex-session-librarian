@@ -165,7 +165,8 @@ def add_commands(subparsers, csl):
         description='Coordinate existing Codex agents through a foreground session connector. '
                     'Followup activates idle; messages/events enter active work automatically. '
                     'No native attach to standalone TUI, no cloning, no automatic approvals. '
-                    'Requires initial endpoint/agent/peer setup. Mac/SSH/accounts integration unverified.')
+                    'Requires initial endpoint/agent/peer setup. Linux-Mac LAN exercised; '
+                    'Internet, Windows and live Claude coordination unvalidated. See docs/BRIDGE.md.')
     parser.add_argument('--home', type=Path, required=True, help='Explicit private bridge home, separate from Codex histories/auth.')
     sub = parser.add_subparsers(dest='action', required=True)
     init = sub.add_parser('init', help='Initialize explicit private state; does not start anything.')

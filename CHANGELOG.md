@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.3.0 — release preparation
+## 0.3.0 — 2026-11-14
 
 - Add an optional experimental bridge for existing Codex conversations: delegate,
   message, progress/final events, interrupt and continue with stable task receipts.
