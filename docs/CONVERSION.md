@@ -48,8 +48,8 @@ share/receive with `--target`, or transfer that JSON privately and use convert.
 
 ## Reading The Conservation Summary
 
-The development checkout adds a human-only summary after successful conversion
-or session installation; the published v0.2.2 output predates it. Machine-readable
+Starting with v0.3.0, a human-only summary follows successful conversion
+or session installation. Machine-readable
 `doctor --json`, canonical JSON and transfer formats keep their existing schema.
 
 - **Present:** recognized text/media message records and structured tool pairs

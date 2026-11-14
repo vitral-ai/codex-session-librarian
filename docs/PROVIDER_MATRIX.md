@@ -67,8 +67,14 @@ archives/non-interactive sources and does not migrate project files or accounts.
 `migrate cleanup` previews by default and archives unchanged originals only with
 `--confirm-restored`; it never deletes files. See [migration](SHARING.md#computer-migration).
 
-`backup` is included in the published
-[v0.2.2 release](https://github.com/vitral-ai/context-session-librarian/releases/tag/v0.2.2)
+`bridge` coordinates existing Codex conversations through an explicitly configured
+compatible runtime, transport and peer permissions. Linux–Mac LAN coordination has
+bounded real-model evidence; Internet, Windows and live Claude coordination remain
+unvalidated. The macOS app is source only, not a validated binary. See
+[bridge compatibility and setup](BRIDGE.md).
+
+`backup` is included in the
+[v0.3.0 release](https://github.com/vitral-ai/context-session-librarian/releases/tag/v0.3.0)
 as an **experimental manual Linux/Codex-only feature**, separate from migration
 and team sharing. It provides encrypted native/portable conversation checkpoints,
 explicit policies, logical-head incremental reuse, partial coverage, multiple

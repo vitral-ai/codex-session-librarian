@@ -46,8 +46,7 @@ class Service:
         self.state = Path(state_root or Path.home() / 'Library/Application Support/CSLBridge')
         self.settings_path = self.state / 'connection.json'
         self.settings = json.loads(self.settings_path.read_text()) if self.settings_path.exists() else {}
-        existing = Path.home() / '.cslb-mac'
-        default = existing if (existing / 'bridge.sqlite').exists() else Path.home() / '.cslb-app'
+        default = Path.home() / '.csl-bridge-app'
         self.home = Path(bridge_home or self.settings.get('bridge_home') or default)
         self.codex_home = Path(codex_home or self.settings.get('codex_home') or os.environ.get('CODEX_HOME', str(Path.home()/'.codex'))).expanduser()
 
@@ -125,7 +124,7 @@ class Service:
             return {'connected':False,'runtime_ready':False,'connector_running':False,'peer':peer,'headline':'Sin conexión local','agents':[], 'owned':False,
                     'note':'Selecciona una sesión existente para iniciar el conector.'}
 
-    def configure(self, thread, coordinator='manunruks'):
+    def configure(self, thread, coordinator='coordinator'):
         identifier(thread); name(coordinator)
         discovery = self.discover()
         if thread not in [x['id'] for x in discovery['sessions']]:
@@ -145,7 +144,7 @@ class Service:
         json_file(self.settings_path,self.settings)
         return {'configured':True,'thread_id':thread,'note':'No se inició generación ni se cambió login.'}
 
-    def start(self, thread=None, coordinator='manunruks'):
+    def start(self, thread=None, coordinator='coordinator'):
         if thread:self.configure(thread,coordinator)
         current=self.status()
         if current.get('runtime_ready',current['connected']):
@@ -278,14 +277,14 @@ class Service:
 
     def connection_info(self):
         return {'thread_id':next(iter(self.registered().values()),None),'bridge_home':str(self.home),
-                'receiver_command':shlex.join(['env','CSL_BRIDGE_HOME='+str(self.home),'CSL_BRIDGE_PEER='+self.settings.get('coordinator','manunruks'),sys.executable,'-I','-S','-B',str(SOURCE/'csl-bridge-receiver')]),
+                'receiver_command':shlex.join(['env','CSL_BRIDGE_HOME='+str(self.home),'CSL_BRIDGE_PEER='+self.settings.get('coordinator','coordinator'),sys.executable,'-I','-S','-B',str(SOURCE/'csl-bridge-receiver')]),
                 'note':'Requiere transporte ya autorizado. No habilita SSH ni puertos ni un servicio de pairing.'}
 
 
 def main():
     parser=argparse.ArgumentParser(description='CSL Bridge app: existing sessions only, no model/server/login creation.')
     parser.add_argument('action',choices=['discover','status','configure','connect','start','stop','events','peer-check','mcp-plan','mcp-install','mcp-rollback','connection-info','transport-run','transport-status','selftest'])
-    parser.add_argument('--thread');parser.add_argument('--coordinator',default='manunruks');parser.add_argument('--after',type=int,default=0)
+    parser.add_argument('--thread');parser.add_argument('--coordinator',default='coordinator');parser.add_argument('--after',type=int,default=0)
     parser.add_argument('--approve-communication',action='store_true',help='Explicit local consent to install only csl_bridge communication tools after connect.')
     parser.add_argument('--transport-profile',type=Path)
     parser.add_argument('--remote-agent',default='coordinator')

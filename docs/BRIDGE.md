@@ -1,22 +1,29 @@
 # Experimental Agent Coordination
 
-This private candidate adds optional `csl bridge` commands for coordinating
+The optional `csl bridge` commands coordinate
 existing Codex agents. A followup starts an idle agent in its own conversation;
 a message enters active work at a runtime boundary. Progress and completed turns
 return automatically. `wait` blocks on events rather than asking a model to poll.
 Interrupt targets an exact delegated turn; a later followup continues the same
 conversation. A completed turn is not proof that its technical conclusion is valid.
 
-This is an experimental integration, not a supported cross-account Codex feature.
-Native Codex **0.167.1** has been exercised with synthetic loopback Responses
-backends, protocol clients and the actual terminal UI. Two installed Linux
-containers also passed real restricted SSH, simulated network interruption,
-recovery and latency controls. Native model tools reached the connector through
-the optional MCP adapter in both containers. Real inference, native macOS/Windows,
-SSH to another physical computer, and same/different-account operation have
-**not** been validated.
-Synthetic answers in the laboratory are fabricated controls of the real runtime,
-not evidence of model behavior or real colleague collaboration.
+This is an experimental integration using internal runtime interfaces. Do not
+assume compatibility with every Codex version, interface or account combination.
+
+| Check | Evidence and scope |
+| --- | --- |
+| Synthetic runtime and terminal UI | Codex 0.167.1, isolated loopback backends; no real model inference |
+| Linux container transport | Restricted SSH, simulated interruption, recovery and latency controls |
+| Existing-runtime control socket | Codex 0.167.2 direct WebSocket and official byte proxy, isolated no-inference check |
+| Real Linux container coordination | Codex 0.167.1, separately authenticated worker; progress, clarification, final, interrupt and continuation; initial MCP approvals required local assistance |
+| Real Linux–Mac LAN coordination | macOS 27.2 arm64, Codex app-server 0.169.0; actual existing conversations, messages, progress/final, interrupt and context-preserving followup |
+| Internet, Windows, Claude live client | Not validated |
+| Native macOS app bundle | Source prototype only; build, clean installation and GUI interaction not validated |
+
+The real LAN exercise is bounded evidence, not a reliability or compatibility
+guarantee. It used explicitly configured transport and MCP access. Synthetic
+laboratory answers are controls, not evidence of real model behavior. The macOS
+app is separate from the CLI connector used in that exercise.
 
 ## Initial Setup
 
@@ -36,7 +43,6 @@ control endpoint is `$CODEX_HOME/app-server-control/app-server-control.sock`,
 which can be a symlink to a shorter private path. That control endpoint accepts
 WebSocket framing. Resolve the explicit endpoint before connecting, especially
 on Darwin where the original rendezvous path may exceed the Unix path limit.
-The pinned 3122 candidate driver also passed when given the resolved path.
 
 The official `app-server proxy --sock PATH` relays **raw bytes** through its
 stdin/stdout; it does not translate JSON lines into WebSocket frames. The optional
@@ -95,7 +101,8 @@ Do not use an unrestricted SSH key as a substitute for this boundary: a remote
 user who can choose the receiver's environment or execute arbitrary commands
 already has broader OS authority. Each direction's trusted setup belongs to
 that machine's owner. Restricted SSH has been tested in isolated Linux
-containers; real colleague devices and Codex-account integration remain untested.
+containers; a separate real Linux–Mac LAN exercise used an owner-authorized
+operator transport as described below.
 
 For a synthetic same-UID laboratory only, `peer --lab-home DIR` selects another
 explicit bridge home instead of SSH. This does not authenticate a real person,

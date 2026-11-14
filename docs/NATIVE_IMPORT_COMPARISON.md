@@ -8,8 +8,8 @@ checksums establishes that a model will remember every fact.
 
 This comparison separates documentation from a bounded synthetic check dated
 **2026-11-12**: Codex **0.167.1**, Claude Code **2.1.308**, CSL **0.2.2**.
-The development conservation summary described in [conversion](CONVERSION.md)
-is a later addition; it is not part of that published version.
+The conservation summary described in [conversion](CONVERSION.md) was added in
+CSL v0.3.0; it is not part of the v0.2.2 version used in that historical check.
 
 ## Choose by the job
 

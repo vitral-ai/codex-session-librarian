@@ -29,7 +29,7 @@ final class App: NSObject, NSApplicationDelegate {
     var pages: NSSegmentedControl!
     var connectView = NSView(), activityView = NSView()
     var sessions = NSPopUpButton()
-    var coordinator = NSTextField(string: "manunruks")
+    var coordinator = NSTextField(string: "coordinator")
     var statusLabel = NSTextField(labelWithString: "Detectando sesión local…")
     var noteLabel = NSTextField(wrappingLabelWithString: "Tu conversación y login se conservan.")
     var runtimeState = NSTextField(labelWithString: "Sesión: pendiente")

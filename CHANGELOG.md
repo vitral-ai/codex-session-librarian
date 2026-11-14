@@ -1,6 +1,16 @@
 # Changelog
 
-## Unreleased
+## 0.3.0 — release preparation
+
+- Add an optional experimental bridge for existing Codex conversations: delegate,
+  message, progress/final events, interrupt and continue with stable task receipts.
+  Setup is explicit; no SSH service, global daemon or account is created.
+- Include a bound MCP adapter and an explicit client-only origin mode. Client-only
+  waits deliver events through tool results, without automatic idle wakeup.
+- Include macOS app prototype source and a tracked-file packaging builder, without
+  a validated app binary, notarization or automatic pairing. Real Linux–Mac LAN
+  coordination is exercised; Internet, Windows and Claude live coordination remain
+  unvalidated.
 
 - Add use-case guidance and a dated, reproducible native-import comparison,
   distinguishing configuration migration from conversation copies and packages.
