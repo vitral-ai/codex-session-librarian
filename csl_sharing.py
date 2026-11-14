@@ -357,9 +357,11 @@ def receive(args, csl):
                                  "share_id": tag}
                 save_json(receipt_path, receipts)
         else:
-            from csl_diagnostics import preflight
-            for path in paths:
-                preflight(path, destination_provider, max_context_chars=getattr(args, "max_context_chars", None))
+            from csl_diagnostics import preflight, print_conservation
+            for sid, path in zip(ids, paths):
+                observation = {}
+                report = preflight(path, destination_provider, max_context_chars=getattr(args, "max_context_chars", None), observation=observation)
+                print_conservation(report, observation, provider=destination_provider, session_id=sid, reused=True)
             for sid in ids:
                 command = shlex.join(resume_command(sid, cwd, getattr(args, 'open_args', ()), destination_provider))
                 print(f"open: {'cd ' + shlex.quote(str(cwd)) + ' && ' if destination_provider == 'claude' else ''}{command}")

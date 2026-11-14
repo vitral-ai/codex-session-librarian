@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.3.0 — 2026-11-14
+
+- Add an optional experimental bridge for existing Codex conversations: delegate,
+  message, progress/final events, interrupt and continue with stable task receipts.
+  Setup is explicit; no SSH service, global daemon or account is created.
+- Include a bound MCP adapter and an explicit client-only origin mode. Client-only
+  waits deliver events through tool results, without automatic idle wakeup.
+- Include macOS app prototype source and a tracked-file packaging builder, without
+  a validated app binary, notarization or automatic pairing. Real Linux–Mac LAN
+  coordination is exercised; Internet, Windows and Claude live coordination remain
+  unvalidated.
+
+- Add use-case guidance and a dated, reproducible native-import comparison,
+  distinguishing configuration migration from conversation copies and packages.
+- Summarize recognized content, known transformations/state omissions and actual
+  structural validation after conversion/import, without changing JSON schemas.
+- Clarify new destination UUIDs versus receipt-based receive reuse; preserve
+  existing copy, migration and cleanup semantics.
+
 ## 0.2.2 — 2026-11-11
 
 - Show the installed launcher's version and explain a different `csl` on PATH.

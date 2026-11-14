@@ -1,0 +1,7 @@
+#!/usr/bin/env python3
+"""Optional SSH forced-command entry; no shell, app-server launch or model login."""
+from pathlib import Path
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from csl_bridge_transport import receiver_main
+raise SystemExit(receiver_main())

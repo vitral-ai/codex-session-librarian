@@ -2,6 +2,37 @@
 
 ## Version records
 
+### v0.3.0
+
+This version adds experimental live coordination of existing Codex conversations,
+an optional bound MCP adapter and explicit client-only origins. The bridge does
+not create a model, native runtime, SSH service or account. Clients and peers keep
+their own permissions. Client-only callers receive events in tool results and do
+not gain automatic idle wakeup.
+
+Bounded real Linux–Mac LAN and separately authenticated Linux-container exercises
+covered delegation, progress/final responses, interruption and continued context.
+These checks are distinct from synthetic runtime tests and do not establish
+Internet, Windows or live Claude–Codex compatibility. Native Mac app source and
+packaging tools are included, without a validated binary or clean-install claim.
+See [bridge compatibility and setup](docs/BRIDGE.md) and [app status](macos/README.md).
+
+Conversion/import now reports recognized content, known omissions and structural
+validation separately from native acceptance or live model recall. The native
+import comparison explains which use cases require a conversation copy rather
+than configuration migration.
+
+Backup remains experimental, manual and Linux/Codex only, with the same external
+age v1.3.2 and recovery-key requirements. Updating the producing CSL version starts
+a fresh backup capture. Finish pending runs and recipient-change plans using their
+original version before upgrading; older checkpoints retain their original keys.
+Historical backup data, tags and Release notes are not rewritten.
+
+The release owner must verify this candidate's exact SHA, checks, isolated install
+and publication. This preparation record alone is not proof of availability;
+the [v0.3.0 Release](https://github.com/vitral-ai/context-session-librarian/releases/tag/v0.3.0)
+and its fixed tag establish the published version.
+
 ### v0.2.2 — release candidate
 
 This patch improves finding and inspecting conversations, sharing guidance and
@@ -122,7 +153,7 @@ its version is explicitly changed; never mix participant versions silently.
 4. Install from the published tag in a fresh isolated environment. Check version,
    resolved SHA and demo. Align README, web and user documentation with reality.
 
-Use the operator's own authorized GitHub identity (Manunruks uses gh-manunruks).
+Use the operator's own authorized GitHub identity.
 Repository access does not itself authorize a new version, a transfer or scope
 expansion. Package-registry publication requires its own plan and verification.
 
